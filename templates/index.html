@@ -4,6 +4,20 @@
   <meta charset="utf-8" />
   <title>Mini Scrape</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .line-clamp-2 {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .sticker {
+      transform: rotate(-8deg);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.25), inset 0 -2px 0 rgba(0,0,0,0.15);
+      background: radial-gradient(circle at 30% 25%, #fde047 0%, #facc15 60%, #ca8a04 100%);
+      border: 2px solid #b45309;
+    }
+  </style>
 </head>
 <body class="bg-gray-50 text-gray-900">
   <main class="max-w-7xl mx-auto p-6">
@@ -32,31 +46,66 @@
     const fmt = (n) => (typeof n === 'number') ? '£' + n.toFixed(2) : '';
     const esc = (s) => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-    function card(g) {
-      const offers = g.offers.map(o => `
-        <a href="${esc(o.url)}" target="_blank" rel="noopener"
-           class="flex items-center justify-between gap-2 py-1 px-2 hover:bg-gray-50 rounded text-sm">
-          <span class="flex items-center gap-2 min-w-0">
-            <img src="${esc(o.retailer_icon)}" class="w-4 h-4 object-contain shrink-0" alt="" />
-            <span class="truncate">${esc(o.retailer)}</span>
-          </span>
-          <span class="font-medium">${fmt(o.price)}</span>
-        </a>`).join('');
+    function offerRow(o) {
+      // o has retailer name + icon + slug always; price/url/in_stock may be missing.
+      const inner = `
+        <span class="flex items-center gap-2 min-w-0">
+          <img src="${esc(o.retailer_icon)}" class="w-4 h-4 object-contain shrink-0" alt="" />
+          <span class="truncate">${esc(o.retailer)}</span>
+        </span>`;
+      if (!o.found) {
+        return `<div class="flex items-center justify-between gap-2 py-1 px-2 text-sm text-gray-400">
+          ${inner}<span class="italic">Not found</span></div>`;
+      }
+      if (!o.in_stock) {
+        return `<a href="${esc(o.url)}" target="_blank" rel="noopener"
+          class="flex items-center justify-between gap-2 py-1 px-2 hover:bg-gray-50 rounded text-sm text-gray-500">
+          ${inner}<span class="italic">No stock</span></a>`;
+      }
+      return `<a href="${esc(o.url)}" target="_blank" rel="noopener"
+        class="flex items-center justify-between gap-2 py-1 px-2 hover:bg-gray-50 rounded text-sm">
+        ${inner}<span class="font-medium">${fmt(o.price)}</span></a>`;
+    }
+
+    function buildOffers(group, allRetailers) {
+      const bySlug = new Map((group.offers || []).map(o => [o.retailer_slug, o]));
+      return allRetailers.map(r => {
+        const found = bySlug.get(r.slug);
+        if (found) return { ...found, found: true };
+        return {
+          retailer: r.name,
+          retailer_slug: r.slug,
+          retailer_icon: r.icon,
+          found: false,
+        };
+      });
+    }
+
+    function card(g, allRetailers) {
+      const offers = buildOffers(g, allRetailers).map(offerRow).join('');
+      const hasStock = g.any_in_stock;
+      const stickerInner = hasStock
+        ? `<img src="${esc(g.cheapest_retailer_icon)}" class="w-5 h-5 object-contain mb-0.5" alt="" />
+           <div class="font-extrabold text-base leading-none">${fmt(g.cheapest_price)}</div>`
+        : `<div class="font-bold text-xs leading-tight text-center">No stock</div>`;
+
+      const imgInner = g.image_url
+        ? `<img src="${esc(g.image_url)}" class="w-full h-full object-cover" alt="${esc(g.title)}" />`
+        : `<div class="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">no image</div>`;
+
+      const imgWrap = hasStock
+        ? `<a href="${esc(g.cheapest_url)}" target="_blank" rel="noopener" class="block w-full h-full">${imgInner}</a>`
+        : imgInner;
 
       return `
         <div class="bg-white border rounded-lg overflow-hidden flex flex-col">
-          <a href="${esc(g.cheapest_url)}" target="_blank" rel="noopener"
-             class="relative block bg-gray-50" style="height:220px">
-            ${g.image_url
-              ? `<img src="${esc(g.image_url)}" class="w-full h-full object-contain p-2" alt="${esc(g.title)}" />`
-              : `<div class="w-full h-full flex items-center justify-center text-gray-400">no image</div>`}
-            <div class="absolute top-2 left-2 bg-black text-white text-sm font-bold px-2 py-1 rounded shadow">
-              ${fmt(g.cheapest_price)}
+          <div class="relative" style="height:240px">
+            ${imgWrap}
+            <div class="sticker absolute top-3 left-3 w-20 h-20 rounded-full flex flex-col items-center justify-center text-stone-900"
+                 title="${esc(g.cheapest_retailer || '')}">
+              ${stickerInner}
             </div>
-            <div class="absolute top-2 right-2 bg-white rounded-full p-1 shadow" title="${esc(g.cheapest_retailer)}">
-              <img src="${esc(g.cheapest_retailer_icon)}" class="w-5 h-5 object-contain" alt="" />
-            </div>
-          </a>
+          </div>
           <div class="p-3 flex flex-col gap-2 flex-1">
             <div class="font-medium text-sm leading-snug line-clamp-2" title="${esc(g.title)}">${esc(g.title)}</div>
             <div class="flex flex-col gap-0.5 mt-auto">${offers}</div>
@@ -75,8 +124,9 @@
         const r = await fetch('/search?q=' + encodeURIComponent(q));
         const data = await r.json();
         const groups = data.groups || [];
+        const retailers = data.retailers || [];
         status.textContent = `${groups.length} products${data.cached ? ' (cached)' : ''}`;
-        grid.innerHTML = groups.map(card).join('');
+        grid.innerHTML = groups.map(g => card(g, retailers)).join('');
         const errEntries = Object.entries(data.errors || {});
         if (errEntries.length) {
           errors.innerHTML = '<strong>Errors:</strong> ' + errEntries.map(([k,v]) => `${esc(k)}: ${esc(v)}`).join(' · ');

@@ -93,18 +93,39 @@ def _group_results(items: list[dict]) -> list[dict]:
             "retailer_icon": it.get("retailer_icon"),
             "url": it.get("url"),
             "price": it.get("price"),
+            "in_stock": it.get("in_stock", False),
         })
+
+    def _offer_sort(o: dict):
+        p = o.get("price")
+        # in-stock first, then by price asc; None price last
+        in_stock_rank = 0 if o.get("in_stock") else 1
+        if isinstance(p, (int, float)):
+            return (in_stock_rank, 0, p)
+        return (in_stock_rank, 1, 0.0)
 
     out: list[dict] = []
     for g in groups.values():
-        g["offers"].sort(key=lambda o: (0, o["price"]) if isinstance(o.get("price"), (int, float)) else (1, 0.0))
-        cheapest = g["offers"][0] if g["offers"] else {}
+        g["offers"].sort(key=_offer_sort)
+        # Cheapest = cheapest in-stock offer if any, else first
+        in_stock_offers = [o for o in g["offers"] if o.get("in_stock") and isinstance(o.get("price"), (int, float))]
+        cheapest = in_stock_offers[0] if in_stock_offers else (g["offers"][0] if g["offers"] else {})
         g["cheapest_price"] = cheapest.get("price")
         g["cheapest_url"] = cheapest.get("url")
         g["cheapest_retailer"] = cheapest.get("retailer")
         g["cheapest_retailer_icon"] = cheapest.get("retailer_icon")
+        g["any_in_stock"] = bool(in_stock_offers)
         out.append(g)
-    out.sort(key=lambda g: (0, g["cheapest_price"]) if isinstance(g.get("cheapest_price"), (int, float)) else (1, 0.0))
+
+    def _group_sort(g: dict):
+        # Groups with any in-stock offer first, then by cheapest price
+        in_stock_rank = 0 if g.get("any_in_stock") else 1
+        p = g.get("cheapest_price")
+        if isinstance(p, (int, float)):
+            return (in_stock_rank, 0, p)
+        return (in_stock_rank, 1, 0.0)
+
+    out.sort(key=_group_sort)
     return out
 
 
@@ -135,10 +156,19 @@ async def search(q: str = Query(..., min_length=1)):
         else:
             results.extend(outcome)
 
-    results = [r for r in results if r.get("in_stock")]
     results.sort(key=_sort_key)
     groups = _group_results(results)
-    payload = {"query": q, "cached": False, "results": results, "groups": groups, "errors": errors}
+    retailers_meta = [
+        {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
+    ]
+    payload = {
+        "query": q,
+        "cached": False,
+        "results": results,
+        "groups": groups,
+        "retailers": retailers_meta,
+        "errors": errors,
+    }
     _cache[key] = (now, payload)
     return JSONResponse(payload)
 
