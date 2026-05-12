@@ -27,9 +27,6 @@
             <th class="p-2">Title</th>
             <th class="p-2">Retailer</th>
             <th class="p-2 text-right">Price</th>
-            <th class="p-2 text-right">RRP</th>
-            <th class="p-2 text-right">Disc</th>
-            <th class="p-2">Stock</th>
             <th class="p-2"></th>
           </tr>
         </thead>
@@ -59,20 +56,13 @@
         const r = await fetch('/search?q=' + encodeURIComponent(q));
         const data = await r.json();
         status.textContent = `${data.results.length} results${data.cached ? ' (cached)' : ''}`;
-        rows.innerHTML = data.results.map(item => {
-          const disc = (item.price && item.rrp && item.rrp > item.price)
-            ? Math.round((1 - item.price / item.rrp) * 100) + '%' : '';
-          return `<tr class="border-t">
+        rows.innerHTML = data.results.map(item => `<tr class="border-t">
             <td class="p-2">${item.image_url ? `<img src="${esc(item.image_url)}" class="w-14 h-14 object-contain" />` : ''}</td>
             <td class="p-2">${esc(item.title)}</td>
             <td class="p-2">${esc(item.retailer)}</td>
             <td class="p-2 text-right">${fmt(item.price)}</td>
-            <td class="p-2 text-right text-gray-500">${fmt(item.rrp)}</td>
-            <td class="p-2 text-right text-green-700">${disc}</td>
-            <td class="p-2">${item.in_stock ? '<span class="text-green-700">In</span>' : '<span class="text-gray-500">Out</span>'}</td>
             <td class="p-2"><a class="text-blue-600 underline" target="_blank" rel="noopener" href="${esc(item.url)}">view</a></td>
-          </tr>`;
-        }).join('');
+          </tr>`).join('');
         const errEntries = Object.entries(data.errors || {});
         if (errEntries.length) {
           errors.innerHTML = '<strong>Errors:</strong> ' + errEntries.map(([k,v]) => `${esc(k)}: ${esc(v)}`).join(' · ');

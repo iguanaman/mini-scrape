@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from retailers import IMPERSONATE
-from retailers import goblin, wayland
+from retailers import goblin, wayland, firestorm
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -36,7 +36,7 @@ async def log_unhandled(request: Request, exc: Exception):
     raise exc
 
 
-RETAILERS = [goblin, wayland]
+RETAILERS = [goblin, wayland, firestorm]
 CACHE_TTL = 15 * 60
 _cache: dict[str, tuple[float, dict]] = {}
 
@@ -73,6 +73,7 @@ async def search(q: str = Query(..., min_length=1)):
         else:
             results.extend(outcome)
 
+    results = [r for r in results if r.get("in_stock")]
     results.sort(key=_sort_key)
     payload = {"query": q, "cached": False, "results": results, "errors": errors}
     _cache[key] = (now, payload)
