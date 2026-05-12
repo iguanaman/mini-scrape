@@ -1,6 +1,8 @@
 from curl_cffi.requests import AsyncSession
 
+SLUG = "wayland"
 NAME = "Wayland Games"
+ICON = "/static/icons/wayland.png"
 BASE = "https://www.waylandgames.co.uk"
 GRAPHQL_URL = BASE + "/api/graphql"
 
@@ -59,6 +61,8 @@ async def search(query: str, client: AsyncSession) -> list[dict]:
         img = (it.get("image") or {}).get("url")
         out.append({
             "retailer": NAME,
+            "retailer_slug": SLUG,
+            "retailer_icon": ICON,
             "title": it.get("title"),
             "url": _abs_url(it.get("url")),
             "price": price,

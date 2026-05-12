@@ -3,7 +3,9 @@ import re
 from curl_cffi.requests import AsyncSession
 from selectolax.parser import HTMLParser
 
+SLUG = "firestorm"
 NAME = "Firestorm Games"
+ICON = "/static/icons/firestorm.png"
 BASE = "https://www.firestormgames.co.uk"
 SEARCH_URL = BASE + "/products"
 
@@ -87,6 +89,8 @@ async def search(query: str, client: AsyncSession) -> list[dict]:
 
         out.append({
             "retailer": NAME,
+            "retailer_slug": SLUG,
+            "retailer_icon": ICON,
             "title": title,
             "url": url,
             "price": price,

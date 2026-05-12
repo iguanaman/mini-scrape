@@ -1,6 +1,8 @@
 from curl_cffi.requests import AsyncSession
 
+SLUG = "goblin"
 NAME = "Goblin Gaming"
+ICON = "/static/icons/goblin.webp"
 BASE = "https://www.goblingaming.co.uk"
 SEARCH_URL = BASE + "/search/suggest.json"
 
@@ -51,6 +53,8 @@ async def search(query: str, client: AsyncSession) -> list[dict]:
         img = feat.get("url") if isinstance(feat, dict) else feat
         out.append({
             "retailer": NAME,
+            "retailer_slug": SLUG,
+            "retailer_icon": ICON,
             "title": p.get("title"),
             "url": _abs_url(p.get("url")),
             "price": price,

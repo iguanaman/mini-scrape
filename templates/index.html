@@ -6,7 +6,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 text-gray-900">
-  <main class="max-w-6xl mx-auto p-6">
+  <main class="max-w-7xl mx-auto p-6">
     <h1 class="text-2xl font-semibold mb-4">Mini Scrape</h1>
 
     <form id="f" class="flex gap-2 mb-4">
@@ -19,50 +19,64 @@
     <div id="status" class="text-sm text-gray-600 mb-2"></div>
     <div id="errors" class="text-sm text-red-700 mb-2"></div>
 
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm bg-white border">
-        <thead class="bg-gray-100 text-left">
-          <tr>
-            <th class="p-2 w-20"></th>
-            <th class="p-2">Title</th>
-            <th class="p-2">Retailer</th>
-            <th class="p-2 text-right">Price</th>
-            <th class="p-2"></th>
-          </tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
+    <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
   </main>
 
   <script>
     const f = document.getElementById('f');
     const qEl = document.getElementById('q');
-    const rows = document.getElementById('rows');
+    const grid = document.getElementById('grid');
     const status = document.getElementById('status');
     const errors = document.getElementById('errors');
 
     const fmt = (n) => (typeof n === 'number') ? '£' + n.toFixed(2) : '';
     const esc = (s) => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+    function card(g) {
+      const offers = g.offers.map(o => `
+        <a href="${esc(o.url)}" target="_blank" rel="noopener"
+           class="flex items-center justify-between gap-2 py-1 px-2 hover:bg-gray-50 rounded text-sm">
+          <span class="flex items-center gap-2 min-w-0">
+            <img src="${esc(o.retailer_icon)}" class="w-4 h-4 object-contain shrink-0" alt="" />
+            <span class="truncate">${esc(o.retailer)}</span>
+          </span>
+          <span class="font-medium">${fmt(o.price)}</span>
+        </a>`).join('');
+
+      return `
+        <div class="bg-white border rounded-lg overflow-hidden flex flex-col">
+          <a href="${esc(g.cheapest_url)}" target="_blank" rel="noopener"
+             class="relative block bg-gray-50" style="height:220px">
+            ${g.image_url
+              ? `<img src="${esc(g.image_url)}" class="w-full h-full object-contain p-2" alt="${esc(g.title)}" />`
+              : `<div class="w-full h-full flex items-center justify-center text-gray-400">no image</div>`}
+            <div class="absolute top-2 left-2 bg-black text-white text-sm font-bold px-2 py-1 rounded shadow">
+              ${fmt(g.cheapest_price)}
+            </div>
+            <div class="absolute top-2 right-2 bg-white rounded-full p-1 shadow" title="${esc(g.cheapest_retailer)}">
+              <img src="${esc(g.cheapest_retailer_icon)}" class="w-5 h-5 object-contain" alt="" />
+            </div>
+          </a>
+          <div class="p-3 flex flex-col gap-2 flex-1">
+            <div class="font-medium text-sm leading-snug line-clamp-2" title="${esc(g.title)}">${esc(g.title)}</div>
+            <div class="flex flex-col gap-0.5 mt-auto">${offers}</div>
+          </div>
+        </div>`;
+    }
+
     f.addEventListener('submit', async (e) => {
       e.preventDefault();
       const q = qEl.value.trim();
       if (!q) return;
-      rows.innerHTML = '';
+      grid.innerHTML = '';
       errors.textContent = '';
       status.textContent = 'Searching…';
       try {
         const r = await fetch('/search?q=' + encodeURIComponent(q));
         const data = await r.json();
-        status.textContent = `${data.results.length} results${data.cached ? ' (cached)' : ''}`;
-        rows.innerHTML = data.results.map(item => `<tr class="border-t">
-            <td class="p-2">${item.image_url ? `<img src="${esc(item.image_url)}" class="w-14 h-14 object-contain" />` : ''}</td>
-            <td class="p-2">${esc(item.title)}</td>
-            <td class="p-2">${esc(item.retailer)}</td>
-            <td class="p-2 text-right">${fmt(item.price)}</td>
-            <td class="p-2"><a class="text-blue-600 underline" target="_blank" rel="noopener" href="${esc(item.url)}">view</a></td>
-          </tr>`).join('');
+        const groups = data.groups || [];
+        status.textContent = `${groups.length} products${data.cached ? ' (cached)' : ''}`;
+        grid.innerHTML = groups.map(card).join('');
         const errEntries = Object.entries(data.errors || {});
         if (errEntries.length) {
           errors.innerHTML = '<strong>Errors:</strong> ' + errEntries.map(([k,v]) => `${esc(k)}: ${esc(v)}`).join(' · ');
