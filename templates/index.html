@@ -6,9 +6,82 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50 text-gray-900">
-  <main class="max-w-5xl mx-auto p-6">
+  <main class="max-w-6xl mx-auto p-6">
     <h1 class="text-2xl font-semibold mb-4">Mini Scrape</h1>
-    <p class="text-gray-600">Scaffold ready. Search coming next.</p>
+
+    <form id="f" class="flex gap-2 mb-4">
+      <input id="q" name="q" type="text" autofocus
+             placeholder="Search miniatures…"
+             class="flex-1 border rounded px-3 py-2" />
+      <button class="bg-black text-white px-4 py-2 rounded">Search</button>
+    </form>
+
+    <div id="status" class="text-sm text-gray-600 mb-2"></div>
+    <div id="errors" class="text-sm text-red-700 mb-2"></div>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm bg-white border">
+        <thead class="bg-gray-100 text-left">
+          <tr>
+            <th class="p-2 w-20"></th>
+            <th class="p-2">Title</th>
+            <th class="p-2">Retailer</th>
+            <th class="p-2 text-right">Price</th>
+            <th class="p-2 text-right">RRP</th>
+            <th class="p-2 text-right">Disc</th>
+            <th class="p-2">Stock</th>
+            <th class="p-2"></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
   </main>
+
+  <script>
+    const f = document.getElementById('f');
+    const qEl = document.getElementById('q');
+    const rows = document.getElementById('rows');
+    const status = document.getElementById('status');
+    const errors = document.getElementById('errors');
+
+    const fmt = (n) => (typeof n === 'number') ? '£' + n.toFixed(2) : '';
+    const esc = (s) => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const q = qEl.value.trim();
+      if (!q) return;
+      rows.innerHTML = '';
+      errors.textContent = '';
+      status.textContent = 'Searching…';
+      try {
+        const r = await fetch('/search?q=' + encodeURIComponent(q));
+        const data = await r.json();
+        status.textContent = `${data.results.length} results${data.cached ? ' (cached)' : ''}`;
+        rows.innerHTML = data.results.map(item => {
+          const disc = (item.price && item.rrp && item.rrp > item.price)
+            ? Math.round((1 - item.price / item.rrp) * 100) + '%' : '';
+          return `<tr class="border-t">
+            <td class="p-2">${item.image_url ? `<img src="${esc(item.image_url)}" class="w-14 h-14 object-contain" />` : ''}</td>
+            <td class="p-2">${esc(item.title)}</td>
+            <td class="p-2">${esc(item.retailer)}</td>
+            <td class="p-2 text-right">${fmt(item.price)}</td>
+            <td class="p-2 text-right text-gray-500">${fmt(item.rrp)}</td>
+            <td class="p-2 text-right text-green-700">${disc}</td>
+            <td class="p-2">${item.in_stock ? '<span class="text-green-700">In</span>' : '<span class="text-gray-500">Out</span>'}</td>
+            <td class="p-2"><a class="text-blue-600 underline" target="_blank" rel="noopener" href="${esc(item.url)}">view</a></td>
+          </tr>`;
+        }).join('');
+        const errEntries = Object.entries(data.errors || {});
+        if (errEntries.length) {
+          errors.innerHTML = '<strong>Errors:</strong> ' + errEntries.map(([k,v]) => `${esc(k)}: ${esc(v)}`).join(' · ');
+        }
+      } catch (err) {
+        status.textContent = '';
+        errors.textContent = 'Request failed: ' + err;
+      }
+    });
+  </script>
 </body>
 </html>

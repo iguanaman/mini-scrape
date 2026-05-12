@@ -6,3 +6,4 @@ uv.lock
 tmp/
 .ruff_cache/
 .mypy_cache/
+server.txt
