@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from retailers import IMPERSONATE
-from retailers import goblin, wayland, firestorm
+from retailers import goblin, wayland, firestorm, element
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -36,7 +36,7 @@ async def log_unhandled(request: Request, exc: Exception):
     raise exc
 
 
-RETAILERS = [goblin, wayland, firestorm]
+RETAILERS = [goblin, wayland, firestorm, element]
 CACHE_TTL = 15 * 60
 _cache: dict[str, tuple[float, dict]] = {}
 
