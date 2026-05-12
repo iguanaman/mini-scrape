@@ -51,18 +51,45 @@ def _sort_key(r: dict):
 
 _SKU_RE = re.compile(r"\b([A-Z]{2,}[-\s]?\d{2,}[A-Z0-9-]*)\b")
 _NORM_RE = re.compile(r"[^a-z0-9]+")
+_TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+
+def _query_tokens(q: str) -> list[str]:
+    # Lowercase, split on non-alphanumeric, drop very short tokens.
+    return [t for t in _TOKEN_RE.findall(q.lower()) if len(t) >= 2]
+
+
+def _title_matches(title: str | None, tokens: list[str]) -> bool:
+    if not title or not tokens:
+        return bool(title)
+    norm = title.lower()
+    return all(t in norm for t in tokens)
+
+
+_STOPWORDS = {"the", "a", "an", "of", "and", "for", "to", "in"}
 
 
 def _group_key(item: dict) -> str:
+    sku = (item.get("sku") or "").strip()
+    if sku:
+        return "sku:" + sku.upper().replace(" ", "").replace("-", "")
     title = (item.get("title") or "").strip()
     if not title:
         return ""
     m = _SKU_RE.search(title)
     if m:
         return "sku:" + m.group(1).upper().replace(" ", "").replace("-", "")
-    norm = _NORM_RE.sub(" ", title.lower()).strip()
-    norm = re.sub(r"\s+", " ", norm)
-    return "title:" + norm
+    tokens = [t for t in _TOKEN_RE.findall(title.lower()) if t not in _STOPWORDS]
+    unique_sorted = sorted(set(tokens))
+    return "tokens:" + " ".join(unique_sorted)
+
+
+def _title_tokenset(title: str | None) -> frozenset[str]:
+    if not title:
+        return frozenset()
+    return frozenset(
+        t for t in _TOKEN_RE.findall(title.lower()) if t not in _STOPWORDS
+    )
 
 
 def _group_results(items: list[dict]) -> list[dict]:
@@ -77,6 +104,7 @@ def _group_results(items: list[dict]) -> list[dict]:
                 "key": key,
                 "title": it.get("title"),
                 "image_url": it.get("image_url"),
+                "title_tokens": _title_tokenset(it.get("title")),
                 "offers": [],
             }
             groups[key] = g
@@ -95,6 +123,32 @@ def _group_results(items: list[dict]) -> list[dict]:
             "price": it.get("price"),
             "in_stock": it.get("in_stock", False),
         })
+
+    # Second pass: merge groups with equivalent token-sets (handles cases where
+    # some retailers gave us SKU and some didn't — same product, different keys).
+    merged: list[dict] = []
+    for g in groups.values():
+        tokens = g["title_tokens"]
+        target = None
+        for m in merged:
+            mt = m["title_tokens"]
+            if not tokens or not mt:
+                continue
+            if tokens == mt or tokens.issubset(mt) or mt.issubset(tokens):
+                target = m
+                break
+        if target is None:
+            merged.append(g)
+        else:
+            target["offers"].extend(g["offers"])
+            if g.get("image_url") and not target.get("image_url"):
+                target["image_url"] = g["image_url"]
+            # Keep the shorter title and the union of tokens
+            if g.get("title") and (not target.get("title") or len(g["title"]) < len(target["title"])):
+                target["title"] = g["title"]
+            target["title_tokens"] = target["title_tokens"] | tokens
+
+    groups = {g["key"]: g for g in merged}
 
     def _offer_sort(o: dict):
         p = o.get("price")
@@ -115,6 +169,7 @@ def _group_results(items: list[dict]) -> list[dict]:
         g["cheapest_retailer"] = cheapest.get("retailer")
         g["cheapest_retailer_icon"] = cheapest.get("retailer_icon")
         g["any_in_stock"] = bool(in_stock_offers)
+        g.pop("title_tokens", None)
         out.append(g)
 
     def _group_sort(g: dict):
@@ -156,6 +211,14 @@ async def search(q: str = Query(..., min_length=1)):
         else:
             results.extend(outcome)
 
+    tokens = _query_tokens(q)
+    results = [
+        r for r in results
+        if _title_matches(r.get("title"), tokens)
+        and r.get("in_stock")
+        and isinstance(r.get("price"), (int, float))
+        and r["price"] >= 15
+    ]
     results.sort(key=_sort_key)
     groups = _group_results(results)
     retailers_meta = [

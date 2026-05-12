@@ -1,10 +1,17 @@
+import json
+import re
+
 from curl_cffi.requests import AsyncSession
 
 SLUG = "goblin"
 NAME = "Goblin Gaming"
 ICON = "/static/icons/goblin.webp"
 BASE = "https://www.goblingaming.co.uk"
-SEARCH_URL = BASE + "/search/suggest.json"
+SEARCH_URL = BASE + "/search"
+
+_LDJSON_RE = re.compile(
+    r'<script type="application/ld\+json">(.*?)</script>', re.S
+)
 
 
 def _to_float(v):
@@ -29,37 +36,46 @@ def _abs_url(u: str | None) -> str | None:
     return u
 
 
+def _strip_query(u: str | None) -> str | None:
+    if not u:
+        return None
+    return u.split("?", 1)[0]
+
+
 async def search(query: str, client: AsyncSession) -> list[dict]:
-    params = {
-        "q": query,
-        "resources[type]": "product",
-        "resources[limit]": "10",
-    }
-    r = await client.get(SEARCH_URL, params=params, timeout=15)
+    r = await client.get(SEARCH_URL, params={"q": query}, timeout=15)
     r.raise_for_status()
-    data = r.json()
-    products = (
-        data.get("resources", {})
-        .get("results", {})
-        .get("products", [])
-    )
     out: list[dict] = []
-    for p in products[:10]:
-        price = _to_float(p.get("price"))
-        rrp = _to_float(p.get("compare_at_price"))
-        if rrp is not None and price is not None and rrp <= price:
-            rrp = None
-        feat = p.get("featured_image")
-        img = feat.get("url") if isinstance(feat, dict) else feat
+    for block in _LDJSON_RE.findall(r.text):
+        try:
+            data = json.loads(block)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(data, dict) or data.get("@type") != "Product":
+            continue
+        offers = data.get("offers") or {}
+        if isinstance(offers, list):
+            offers = offers[0] if offers else {}
+        availability = (offers.get("availability") or "").lower()
+        in_stock = "instock" in availability  # "http://schema.org/InStock"
+
+        price = _to_float(offers.get("price"))
+        url = _abs_url(_strip_query(data.get("url") or offers.get("url")))
+        image = data.get("image")
+        if isinstance(image, list):
+            image = image[0] if image else None
         out.append({
             "retailer": NAME,
             "retailer_slug": SLUG,
             "retailer_icon": ICON,
-            "title": p.get("title"),
-            "url": _abs_url(p.get("url")),
+            "title": data.get("name"),
+            "url": url,
             "price": price,
-            "rrp": rrp,
-            "in_stock": bool(p.get("available")),
-            "image_url": _abs_url(img),
+            "rrp": None,
+            "in_stock": in_stock,
+            "image_url": _abs_url(image),
+            "sku": data.get("sku"),
         })
+        if len(out) >= 10:
+            break
     return out

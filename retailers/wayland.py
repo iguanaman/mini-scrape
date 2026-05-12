@@ -11,6 +11,7 @@ QUERY = """query productSearch($search: String, $pageSize: Int = 10) {
     items {
       url
       title: name
+      sku
       image { url }
       price_range {
         minimum_price {
@@ -52,6 +53,7 @@ async def search(query: str, client: AsyncSession) -> list[dict]:
     data = r.json()
     items = (data.get("data") or {}).get("results", {}).get("items") or []
     out: list[dict] = []
+    items = [it for it in items if it.get("stock_status") == "IN_STOCK"]
     for it in items[:10]:
         pr = (it.get("price_range") or {}).get("minimum_price") or {}
         price = ((pr.get("final_price") or {}).get("value"))
@@ -69,5 +71,6 @@ async def search(query: str, client: AsyncSession) -> list[dict]:
             "rrp": rrp,
             "in_stock": it.get("stock_status") == "IN_STOCK",
             "image_url": img,
+            "sku": it.get("sku"),
         })
     return out

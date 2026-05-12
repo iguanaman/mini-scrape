@@ -12,35 +12,56 @@
       overflow: hidden;
     }
     .sticker {
-      transform: rotate(-8deg);
-      box-shadow: 0 4px 10px rgba(0,0,0,0.25), inset 0 -2px 0 rgba(0,0,0,0.15);
-      background: radial-gradient(circle at 30% 25%, #fde047 0%, #facc15 60%, #ca8a04 100%);
-      border: 2px solid #b45309;
+      transform: rotate(-6deg);
+      background: radial-gradient(circle at 30% 25%, #fffbeb 0%, #fef3c7 70%, #fcd34d 100%);
+      clip-path: polygon(
+        50% 0%, 60% 12%, 73% 7%, 76% 21%, 90% 22%, 86% 36%, 99% 43%,
+        90% 54%, 100% 65%, 86% 71%, 88% 84%, 74% 84%, 71% 97%, 59% 89%,
+        50% 100%, 41% 89%, 29% 97%, 26% 84%, 12% 84%, 14% 71%, 0% 65%,
+        10% 54%, 1% 43%, 14% 36%, 10% 22%, 24% 21%, 27% 7%, 40% 12%
+      );
     }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900">
+  <header class="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b">
+    <div class="max-w-7xl mx-auto p-4">
+      <form id="f" class="flex gap-2 max-w-md mx-auto">
+        <input id="q" name="q" type="text" autofocus
+               placeholder="Search miniatures…"
+               class="flex-1 border rounded px-3 py-1.5 text-sm" />
+        <button class="bg-black text-white px-3 py-1.5 rounded text-sm">Search</button>
+      </form>
+    </div>
+  </header>
+
+  <aside id="sidebar"
+         class="fixed top-20 left-0 z-20 bg-white border border-l-0 rounded-r-lg shadow-md transition-transform -translate-x-[calc(100%-2.25rem)]">
+    <button id="sidebar-toggle" type="button"
+            class="absolute top-2 right-2 text-gray-500 hover:text-black text-lg leading-none">›</button>
+    <div class="p-4 pr-10 w-72">
+      <h2 class="font-semibold text-sm mb-2">Free UK shipping thresholds</h2>
+      <ul class="text-sm space-y-1">
+        <li class="flex items-center gap-2"><img src="/static/icons/wayland.png" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Wayland Games</span> <span class="font-medium">£20</span></li>
+        <li class="flex items-center gap-2"><img src="/static/icons/firestorm.png" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Firestorm Games</span> <span class="font-medium">£60</span></li>
+        <li class="flex items-center gap-2"><img src="/static/icons/goblin.webp" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Goblin Gaming</span> <span class="font-medium">£75</span></li>
+        <li class="flex items-center gap-2"><img src="/static/icons/element.ico" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Element Games</span> <span class="font-medium">£80</span></li>
+      </ul>
+      <p class="text-xs text-gray-500 mt-3">UK standard delivery, excluding restricted items. Always check the store for the current rate.</p>
+    </div>
+  </aside>
+
   <main class="max-w-7xl mx-auto p-6">
-    <h1 class="text-2xl font-semibold mb-4">Mini Scrape</h1>
 
-    <form id="f" class="flex gap-2 mb-4">
-      <input id="q" name="q" type="text" autofocus
-             placeholder="Search miniatures…"
-             class="flex-1 border rounded px-3 py-2" />
-      <button class="bg-black text-white px-4 py-2 rounded">Search</button>
-    </form>
-
-    <div id="status" class="text-sm text-gray-600 mb-2"></div>
     <div id="errors" class="text-sm text-red-700 mb-2"></div>
 
-    <div id="grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+    <div id="grid" class="flex flex-wrap justify-center gap-4"></div>
   </main>
 
   <script>
     const f = document.getElementById('f');
     const qEl = document.getElementById('q');
     const grid = document.getElementById('grid');
-    const status = document.getElementById('status');
     const errors = document.getElementById('errors');
 
     const fmt = (n) => (typeof n === 'number') ? '£' + n.toFixed(2) : '';
@@ -85,12 +106,11 @@
       const offers = buildOffers(g, allRetailers).map(offerRow).join('');
       const hasStock = g.any_in_stock;
       const stickerInner = hasStock
-        ? `<img src="${esc(g.cheapest_retailer_icon)}" class="w-5 h-5 object-contain mb-0.5" alt="" />
-           <div class="font-extrabold text-base leading-none">${fmt(g.cheapest_price)}</div>`
+        ? `<div class="font-extrabold text-sm leading-none">${fmt(g.cheapest_price)}</div>`
         : `<div class="font-bold text-xs leading-tight text-center">No stock</div>`;
 
       const imgInner = g.image_url
-        ? `<img src="${esc(g.image_url)}" class="w-full h-full object-cover" alt="${esc(g.title)}" />`
+        ? `<img src="${esc(g.image_url)}" class="w-full h-full object-contain" alt="${esc(g.title)}" />`
         : `<div class="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">no image</div>`;
 
       const imgWrap = hasStock
@@ -98,10 +118,10 @@
         : imgInner;
 
       return `
-        <div class="bg-white border rounded-lg overflow-hidden flex flex-col">
+        <div class="bg-white border rounded-lg overflow-hidden flex flex-col w-72">
           <div class="relative" style="height:240px">
             ${imgWrap}
-            <div class="sticker absolute top-3 left-3 w-20 h-20 rounded-full flex flex-col items-center justify-center text-stone-900"
+            <div class="sticker absolute bottom-8 right-3 w-16 h-16 flex flex-col items-center justify-center text-stone-900"
                  title="${esc(g.cheapest_retailer || '')}">
               ${stickerInner}
             </div>
@@ -113,29 +133,60 @@
         </div>`;
     }
 
-    f.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const q = qEl.value.trim();
-      if (!q) return;
+    async function runSearch(q) {
       grid.innerHTML = '';
       errors.textContent = '';
-      status.textContent = 'Searching…';
       try {
         const r = await fetch('/search?q=' + encodeURIComponent(q));
         const data = await r.json();
         const groups = data.groups || [];
         const retailers = data.retailers || [];
-        status.textContent = `${groups.length} products${data.cached ? ' (cached)' : ''}`;
         grid.innerHTML = groups.map(g => card(g, retailers)).join('');
         const errEntries = Object.entries(data.errors || {});
         if (errEntries.length) {
           errors.innerHTML = '<strong>Errors:</strong> ' + errEntries.map(([k,v]) => `${esc(k)}: ${esc(v)}`).join(' · ');
         }
       } catch (err) {
-        status.textContent = '';
         errors.textContent = 'Request failed: ' + err;
       }
+    }
+
+    f.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const q = qEl.value.trim();
+      if (!q) return;
+      const url = '/?q=' + encodeURIComponent(q);
+      if (location.pathname + location.search !== url) {
+        history.pushState({q}, '', url);
+      }
+      runSearch(q);
     });
+
+    window.addEventListener('popstate', () => {
+      const q = new URLSearchParams(location.search).get('q') || '';
+      qEl.value = q;
+      if (q) runSearch(q); else { grid.innerHTML = ''; }
+    });
+
+    // Sidebar toggle
+    {
+      const sb = document.getElementById('sidebar');
+      const btn = document.getElementById('sidebar-toggle');
+      btn.addEventListener('click', () => {
+        const open = sb.classList.toggle('translate-x-0');
+        sb.classList.toggle('-translate-x-[calc(100%-2.25rem)]', !open);
+        btn.textContent = open ? '‹' : '›';
+      });
+    }
+
+    // Initial load: if URL has ?q=, populate input and run search.
+    {
+      const q = new URLSearchParams(location.search).get('q') || '';
+      if (q) {
+        qEl.value = q;
+        runSearch(q);
+      }
+    }
   </script>
 </body>
 </html>
