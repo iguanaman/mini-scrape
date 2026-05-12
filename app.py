@@ -4,14 +4,14 @@ import sys
 import time
 from pathlib import Path
 
-import httpx
+from curl_cffi.requests import AsyncSession
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
-from retailers import USER_AGENT
-from retailers import goblin
+from retailers import IMPERSONATE
+from retailers import goblin, wayland
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -36,7 +36,7 @@ async def log_unhandled(request: Request, exc: Exception):
     raise exc
 
 
-RETAILERS = [goblin]
+RETAILERS = [goblin, wayland]
 CACHE_TTL = 15 * 60
 _cache: dict[str, tuple[float, dict]] = {}
 
@@ -58,10 +58,9 @@ async def search(q: str = Query(..., min_length=1)):
 
     results: list[dict] = []
     errors: dict[str, str] = {}
-    async with httpx.AsyncClient(
-        headers={"User-Agent": USER_AGENT},
+    async with AsyncSession(
+        impersonate=IMPERSONATE,
         timeout=15,
-        follow_redirects=True,
     ) as client:
         outcomes = await asyncio.gather(
             *(r.search(q, client) for r in RETAILERS),

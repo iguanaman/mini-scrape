@@ -1,4 +1,4 @@
-import httpx
+from curl_cffi.requests import AsyncSession
 
 NAME = "Goblin Gaming"
 BASE = "https://www.goblingaming.co.uk"
@@ -12,7 +12,6 @@ def _to_float(v):
         f = float(v)
     except (TypeError, ValueError):
         return None
-    # Shopify suggest.json returns prices as decimal strings in major units (e.g. "19.80").
     return f if f > 0 else None
 
 
@@ -28,7 +27,7 @@ def _abs_url(u: str | None) -> str | None:
     return u
 
 
-async def search(query: str, client: httpx.AsyncClient) -> list[dict]:
+async def search(query: str, client: AsyncSession) -> list[dict]:
     params = {
         "q": query,
         "resources[type]": "product",
@@ -48,7 +47,8 @@ async def search(query: str, client: httpx.AsyncClient) -> list[dict]:
         rrp = _to_float(p.get("compare_at_price"))
         if rrp is not None and price is not None and rrp <= price:
             rrp = None
-        img = (p.get("featured_image") or {}).get("url") if isinstance(p.get("featured_image"), dict) else p.get("featured_image")
+        feat = p.get("featured_image")
+        img = feat.get("url") if isinstance(feat, dict) else feat
         out.append({
             "retailer": NAME,
             "title": p.get("title"),
