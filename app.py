@@ -376,7 +376,7 @@ async def search(q: str = Query(..., min_length=1)):
     _persist_search_groups(groups)
     _hidden = set(db.hidden_skus())
     if _hidden:
-        groups = [g for g in groups if _norm_sku((g.get("skus") or [None])[0]) not in _hidden]
+        groups = [g for g in groups if not any(_norm_sku(s) in _hidden for s in (g.get("skus") or []))]
     retailers_meta = [
         {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
     ]
