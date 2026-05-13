@@ -3,6 +3,7 @@ import logging
 import re
 import sys
 import time
+import unicodedata
 from pathlib import Path
 
 from curl_cffi.requests import AsyncSession
@@ -13,17 +14,16 @@ from fastapi.templating import Jinja2Templates
 from starlette.requests import Request
 
 from retailers import IMPERSONATE
-from retailers import goblin, wayland, firestorm, element
+from retailers import goblin, wayland, firestorm, element, overlord, nemc
+from manufacturers import MANUFACTURERS
+import db
 
 BASE_DIR = Path(__file__).resolve().parent
 
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    handlers=[
-        logging.FileHandler(BASE_DIR / "server.txt", mode="a", encoding="utf-8"),
-        logging.StreamHandler(sys.stdout),
-    ],
+    handlers=[logging.StreamHandler(sys.stdout)],
     force=True,
 )
 log = logging.getLogger("mini-scrape")
@@ -31,6 +31,7 @@ log = logging.getLogger("mini-scrape")
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+db.init()
 
 
 @app.exception_handler(Exception)
@@ -39,7 +40,7 @@ async def log_unhandled(request: Request, exc: Exception):
     raise exc
 
 
-RETAILERS = [goblin, wayland, firestorm, element]
+RETAILERS = [goblin, wayland, firestorm, element, overlord, nemc]
 CACHE_TTL = 15 * 60
 _cache: dict[str, tuple[float, dict]] = {}
 
@@ -54,19 +55,75 @@ _NORM_RE = re.compile(r"[^a-z0-9]+")
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
+def _fold(s: str) -> str:
+    # Lowercase + strip diacritics so "Raumjäger" == "raumjager".
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", s.lower())
+        if not unicodedata.combining(c)
+    )
+
+
 def _query_tokens(q: str) -> list[str]:
     # Lowercase, split on non-alphanumeric, drop very short tokens.
-    return [t for t in _TOKEN_RE.findall(q.lower()) if len(t) >= 2]
+    return [t for t in _TOKEN_RE.findall(_fold(q)) if len(t) >= 2]
 
 
 def _title_matches(title: str | None, tokens: list[str]) -> bool:
     if not title or not tokens:
         return bool(title)
-    norm = title.lower()
+    norm = _fold(title)
     return all(t in norm for t in tokens)
 
 
+def _is_sku_query(q: str) -> bool:
+    # SKU-ish: single alphanumeric token that's either alphanumeric mixed,
+    # or a long all-digit code (e.g. GW's 11-digit product codes like 60010199058).
+    s = q.strip()
+    if " " in s or len(s) < 4:
+        return False
+    has_alpha = any(c.isalpha() for c in s)
+    has_digit = any(c.isdigit() for c in s)
+    if has_alpha and has_digit:
+        return True
+    if not has_alpha and has_digit and len(s) >= 6:
+        return True
+    return False
+
+
+def _matches(item: dict, q: str, tokens: list[str]) -> bool:
+    # If query looks like a SKU, trust the retailer's search results.
+    # Retailers that index SKU (all four do, at least for site search) will
+    # only return relevant products; the title rarely contains the SKU literally.
+    if _is_sku_query(q):
+        return True
+    return _title_matches(item.get("title"), tokens)
+
+
 _STOPWORDS = {"the", "a", "an", "of", "and", "for", "to", "in"}
+
+
+def _edit_le_1(a: str, b: str) -> bool:
+    # True if Levenshtein distance ≤ 1.
+    if a == b:
+        return True
+    la, lb = len(a), len(b)
+    if abs(la - lb) > 1:
+        return False
+    if la > lb:
+        a, b, la, lb = b, a, lb, la
+    i = j = diffs = 0
+    while i < la and j < lb:
+        if a[i] != b[j]:
+            diffs += 1
+            if diffs > 1:
+                return False
+            if la == lb:
+                i += 1
+            j += 1
+        else:
+            i += 1
+            j += 1
+    return True
 
 
 def _group_key(item: dict) -> str:
@@ -79,7 +136,7 @@ def _group_key(item: dict) -> str:
     m = _SKU_RE.search(title)
     if m:
         return "sku:" + m.group(1).upper().replace(" ", "").replace("-", "")
-    tokens = [t for t in _TOKEN_RE.findall(title.lower()) if t not in _STOPWORDS]
+    tokens = [t for t in _TOKEN_RE.findall(_fold(title)) if t not in _STOPWORDS]
     unique_sorted = sorted(set(tokens))
     return "tokens:" + " ".join(unique_sorted)
 
@@ -88,11 +145,11 @@ def _title_tokenset(title: str | None) -> frozenset[str]:
     if not title:
         return frozenset()
     return frozenset(
-        t for t in _TOKEN_RE.findall(title.lower()) if t not in _STOPWORDS
+        t for t in _TOKEN_RE.findall(_fold(title)) if t not in _STOPWORDS
     )
 
 
-def _group_results(items: list[dict]) -> list[dict]:
+def _group_results(items: list[dict], query_tokens: frozenset[str] = frozenset()) -> list[dict]:
     groups: dict[str, dict] = {}
     for it in items:
         key = _group_key(it)
@@ -105,6 +162,7 @@ def _group_results(items: list[dict]) -> list[dict]:
                 "title": it.get("title"),
                 "image_url": it.get("image_url"),
                 "title_tokens": _title_tokenset(it.get("title")),
+                "skus": [],
                 "offers": [],
             }
             groups[key] = g
@@ -115,6 +173,9 @@ def _group_results(items: list[dict]) -> list[dict]:
             if it.get("title") and len(it["title"]) > len(g["title"] or ""):
                 # keep shorter title; longer often has extra junk. Skip.
                 pass
+        sku = (it.get("sku") or "").strip()
+        if sku and sku not in g["skus"]:
+            g["skus"].append(sku)
         g["offers"].append({
             "retailer": it.get("retailer"),
             "retailer_slug": it.get("retailer_slug"),
@@ -124,8 +185,28 @@ def _group_results(items: list[dict]) -> list[dict]:
             "in_stock": it.get("in_stock", False),
         })
 
-    # Second pass: merge groups with equivalent token-sets (handles cases where
-    # some retailers gave us SKU and some didn't — same product, different keys).
+    # Second pass: merge groups with similar token-sets (handles cases where
+    # some retailers gave us SKU and some didn't, or one has a typo / extra
+    # prefix word like "Marcher:"). Uses fuzzy token containment.
+    def _fuzzy_in(token: str, pool: frozenset[str]) -> bool:
+        if token in pool:
+            return True
+        # Allow Levenshtein-1 for tokens of length >= 4 (catches "veterans"/"veterand").
+        if len(token) < 4:
+            return False
+        for p in pool:
+            if abs(len(p) - len(token)) > 1 or len(p) < 4:
+                continue
+            # Quick edit-distance ≤ 1 check
+            if _edit_le_1(token, p):
+                return True
+        return False
+
+    # Distinguishing tokens that mean two products are different variants/sequels
+    # (e.g. "II", "2", "3"). If one side has one and the other doesn't, never merge.
+    SEQ_TOKENS = {"ii", "iii", "iv", "v", "vi", "vii", "viii", "ix",
+                  "2", "3", "4", "5", "6", "7", "8", "9"}
+
     merged: list[dict] = []
     for g in groups.values():
         tokens = g["title_tokens"]
@@ -134,7 +215,31 @@ def _group_results(items: list[dict]) -> list[dict]:
             mt = m["title_tokens"]
             if not tokens or not mt:
                 continue
-            if tokens == mt or tokens.issubset(mt) or mt.issubset(tokens):
+            # Reject if sequence markers disagree.
+            if (tokens & SEQ_TOKENS) != (mt & SEQ_TOKENS):
+                continue
+            # Subtract query tokens — products that only share the search query
+            # aren't the same product (e.g. all "Star Wars Legion Starter Set"
+            # faction boxes share those 5 tokens but are different products).
+            t_dist = tokens - query_tokens
+            mt_dist = mt - query_tokens
+            if not t_dist or not mt_dist:
+                # One side's title is essentially the query. Merge if the other
+                # side's extra tokens are all near-duplicates of query tokens
+                # (e.g. "marines" vs query "marine"); otherwise reject so that
+                # unrelated products sharing only the query don't collapse.
+                extra = t_dist or mt_dist
+                if not all(_fuzzy_in(t, query_tokens) for t in extra):
+                    continue
+                target = m
+                break
+            small, large = (t_dist, mt_dist) if len(t_dist) <= len(mt_dist) else (mt_dist, t_dist)
+            if not small:
+                # Both empty after stripping query — treat as match.
+                target = m
+                break
+            hits = sum(1 for t in small if _fuzzy_in(t, large))
+            if hits / len(small) >= 0.7:
                 target = m
                 break
         if target is None:
@@ -147,6 +252,9 @@ def _group_results(items: list[dict]) -> list[dict]:
             if g.get("title") and (not target.get("title") or len(g["title"]) < len(target["title"])):
                 target["title"] = g["title"]
             target["title_tokens"] = target["title_tokens"] | tokens
+            for s in g.get("skus", []):
+                if s not in target["skus"]:
+                    target["skus"].append(s)
 
     groups = {g["key"]: g for g in merged}
 
@@ -184,6 +292,29 @@ def _group_results(items: list[dict]) -> list[dict]:
     return out
 
 
+def _persist_search_groups(groups: list[dict]) -> None:
+    for g in groups:
+        skus = g.get("skus") or []
+        if not skus:
+            continue
+        prices: dict[str, dict] = {}
+        for o in g.get("offers", []):
+            slug = o.get("retailer_slug")
+            if not slug:
+                continue
+            in_stock = bool(o.get("in_stock")) and isinstance(o.get("price"), (int, float))
+            prices[slug] = {
+                "price": o.get("price") if in_stock else None,
+                "url": o.get("url"),
+            }
+        for sku in skus:
+            try:
+                db.upsert_from_retailer(sku, g.get("title"), g.get("image_url"), prices)
+            except Exception:
+                log.exception("DB upsert (retailer) failed for sku=%s", sku)
+
+
+
 @app.get("/search")
 async def search(q: str = Query(..., min_length=1)):
     key = q.strip().lower()
@@ -214,13 +345,14 @@ async def search(q: str = Query(..., min_length=1)):
     tokens = _query_tokens(q)
     results = [
         r for r in results
-        if _title_matches(r.get("title"), tokens)
+        if _matches(r, q, tokens)
         and r.get("in_stock")
         and isinstance(r.get("price"), (int, float))
         and r["price"] >= 15
     ]
     results.sort(key=_sort_key)
-    groups = _group_results(results)
+    groups = _group_results(results, frozenset(tokens))
+    _persist_search_groups(groups)
     retailers_meta = [
         {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
     ]
@@ -234,6 +366,83 @@ async def search(q: str = Query(..., min_length=1)):
     }
     _cache[key] = (now, payload)
     return JSONResponse(payload)
+
+
+@app.get("/manufacturers")
+async def manufacturers_index():
+    out = []
+    for m in MANUFACTURERS:
+        out.append({
+            "slug": m.SLUG,
+            "name": m.NAME,
+            "icon": m.ICON,
+            "ranges": [
+                {"slug": r["slug"], "name": r["name"], "group": r.get("group")}
+                for r in m.RANGES
+            ],
+        })
+    return JSONResponse({"manufacturers": out})
+
+
+@app.get("/manufacturer/{man_slug}/{range_slug}")
+async def manufacturer_range(man_slug: str, range_slug: str):
+    module = next((m for m in MANUFACTURERS if m.SLUG == man_slug), None)
+    if module is None:
+        return JSONResponse({"error": "unknown manufacturer"}, status_code=404)
+    range_def = next((r for r in module.RANGES if r["slug"] == range_slug), None)
+    if range_def is None:
+        return JSONResponse({"error": "unknown range"}, status_code=404)
+
+    products = db.products_for_range(man_slug, range_slug)
+    payload = {
+        "manufacturer": {"slug": module.SLUG, "name": module.NAME, "icon": module.ICON},
+        "range": {"slug": range_def["slug"], "name": range_def["name"]},
+        "products": products,
+    }
+    return JSONResponse(payload)
+
+
+@app.get("/api/wishlist")
+async def wishlist_list():
+    items = db.wishlist_products()
+    retailers_meta = [
+        {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
+    ]
+    return JSONResponse({"items": items, "retailers": retailers_meta})
+
+
+@app.get("/api/wishlist/skus")
+async def wishlist_sku_list():
+    return JSONResponse({"skus": db.wishlist_skus()})
+
+
+@app.post("/api/wishlist/{sku}")
+async def wishlist_add(sku: str):
+    db.add_wishlist(sku)
+    return JSONResponse({"ok": True})
+
+
+@app.delete("/api/wishlist/{sku}")
+async def wishlist_delete(sku: str):
+    db.remove_wishlist(sku)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/hide/{sku}")
+async def api_hide(sku: str):
+    db.hide_product(sku)
+    return JSONResponse({"ok": True})
+
+
+@app.delete("/api/hide/{sku}")
+async def api_unhide(sku: str):
+    db.unhide_product(sku)
+    return JSONResponse({"ok": True})
+
+
+@app.get("/wishlist", response_class=HTMLResponse)
+async def wishlist_page(request: Request):
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/", response_class=HTMLResponse)
