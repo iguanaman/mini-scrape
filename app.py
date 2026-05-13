@@ -149,7 +149,7 @@ def _title_tokenset(title: str | None) -> frozenset[str]:
     )
 
 
-def _group_results(items: list[dict], query_tokens: frozenset[str] = frozenset()) -> list[dict]:
+def _group_results(items: list[dict], query_tokens: frozenset[str] = frozenset(), sku_query: bool = False) -> list[dict]:
     groups: dict[str, dict] = {}
     for it in items:
         key = _group_key(it)
@@ -184,6 +184,21 @@ def _group_results(items: list[dict], query_tokens: frozenset[str] = frozenset()
             "price": it.get("price"),
             "in_stock": it.get("in_stock", False),
         })
+
+    # For SKU queries every result is the same product — collapse into one group.
+    if sku_query and groups:
+        combined = next(iter(groups.values()))
+        for g in list(groups.values())[1:]:
+            combined["offers"].extend(g["offers"])
+            if g.get("image_url") and not combined.get("image_url"):
+                combined["image_url"] = g["image_url"]
+            if g.get("title") and (not combined.get("title") or len(g["title"]) < len(combined["title"])):
+                combined["title"] = g["title"]
+            combined["title_tokens"] = combined["title_tokens"] | g["title_tokens"]
+            for s in g.get("skus", []):
+                if s not in combined["skus"]:
+                    combined["skus"].append(s)
+        groups = {combined["key"]: combined}
 
     # Second pass: merge groups with similar token-sets (handles cases where
     # some retailers gave us SKU and some didn't, or one has a typo / extra
@@ -351,8 +366,14 @@ async def search(q: str = Query(..., min_length=1)):
         and r["price"] >= 15
     ]
     results.sort(key=_sort_key)
-    groups = _group_results(results, frozenset(tokens))
+    groups = _group_results(results, frozenset(tokens), sku_query=_is_sku_query(q))
     _persist_search_groups(groups)
+    _hidden = set(db.hidden_skus())
+    if _hidden:
+        def _primary_sku(g):
+            skus = g.get("skus") or []
+            return skus[0].strip().upper().replace(" ", "").replace("-", "") if skus else None
+        groups = [g for g in groups if _primary_sku(g) not in _hidden]
     retailers_meta = [
         {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
     ]
@@ -394,6 +415,9 @@ async def manufacturer_range(man_slug: str, range_slug: str):
         return JSONResponse({"error": "unknown range"}, status_code=404)
 
     products = db.products_for_range(man_slug, range_slug)
+    _hidden = set(db.hidden_skus())
+    if _hidden:
+        products = [p for p in products if not (p.get("sku") and p["sku"].strip().upper().replace(" ", "").replace("-", "") in _hidden)]
     payload = {
         "manufacturer": {"slug": module.SLUG, "name": module.NAME, "icon": module.ICON},
         "range": {"slug": range_def["slug"], "name": range_def["name"]},
