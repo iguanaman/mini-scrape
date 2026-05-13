@@ -21,17 +21,21 @@
         10% 54%, 1% 43%, 14% 36%, 10% 22%, 24% 21%, 27% 7%, 40% 12%
       );
     }
+    .card-wrap:hover .hide-btn { opacity: 1; }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900">
   <header class="sticky top-0 z-10 bg-gray-50/90 backdrop-blur border-b">
-    <div class="max-w-7xl mx-auto p-4">
-      <form id="f" class="flex gap-2 max-w-md mx-auto">
+    <div class="max-w-7xl mx-auto p-4 relative flex items-center justify-center gap-4">
+      <a id="wishlist-link" href="/wishlist" class="absolute left-4 text-sm no-underline text-gray-700 hover:text-black">Wishlist</a>
+      <a id="home-link" href="/" class="font-bold text-lg shrink-0 hover:text-gray-600">mini-scrape</a>
+      <form id="f" class="flex gap-2 w-full max-w-md">
         <input id="q" name="q" type="text" autofocus
                placeholder="Search miniatures…"
                class="flex-1 border rounded px-3 py-1.5 text-sm" />
         <button class="bg-black text-white px-3 py-1.5 rounded text-sm">Search</button>
       </form>
+      <div id="store-filters" class="absolute right-4 flex items-center gap-2"></div>
     </div>
   </header>
 
@@ -46,16 +50,17 @@
         <li class="flex items-center gap-2"><img src="/static/icons/firestorm.png" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Firestorm Games</span> <span class="font-medium">£60</span></li>
         <li class="flex items-center gap-2"><img src="/static/icons/goblin.webp" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Goblin Gaming</span> <span class="font-medium">£75</span></li>
         <li class="flex items-center gap-2"><img src="/static/icons/element.ico" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Element Games</span> <span class="font-medium">£80</span></li>
+        <li class="flex items-center gap-2"><img src="/static/icons/overlord.png" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Overlord Games</span> <span class="font-medium">£75</span></li>
+        <li class="flex items-center gap-2"><img src="/static/icons/nemc.jpg" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">North East Model Centre</span> <span class="font-medium">none</span></li>
       </ul>
       <p class="text-xs text-gray-500 mt-3">UK standard delivery, excluding restricted items. Always check the store for the current rate.</p>
     </div>
   </aside>
 
-  <main class="max-w-7xl mx-auto p-6">
-
-    <div id="errors" class="text-sm text-red-700 mb-2"></div>
-
-    <div id="grid" class="flex flex-wrap justify-center gap-4"></div>
+  <main class="max-w-7xl mx-auto px-6 pt-2 pb-6 flex flex-col gap-4">
+    <div id="errors" class="text-sm text-red-700 empty:hidden"></div>
+    <div id="manufacturers" class="flex flex-col gap-6 empty:hidden"></div>
+    <div id="grid" class="flex flex-wrap justify-center gap-4 empty:hidden"></div>
   </main>
 
   <script>
@@ -63,34 +68,116 @@
     const qEl = document.getElementById('q');
     const grid = document.getElementById('grid');
     const errors = document.getElementById('errors');
+    const manufacturers = document.getElementById('manufacturers');
+    const storeFilters = document.getElementById('store-filters');
+
+    let selectedStore = null;
+    let lastGroups = [];
+    let lastRetailers = [];
+    let cardsExpanded = false;
+    let wishlistSet = new Set();
+
+    async function loadWishlistSet() {
+      try {
+        const r = await fetch('/api/wishlist/skus');
+        const data = await r.json();
+        wishlistSet = new Set((data.skus || []));
+      } catch (_) {}
+    }
+
+    function normSku(s) {
+      return (s || '').toString().toUpperCase().replace(/[\s-]/g, '');
+    }
+
+    async function toggleHide(sku, btn, cardEl) {
+      const key = normSku(sku);
+      if (!key) return;
+      const isHidden = btn.dataset.hidden === '1';
+      try {
+        await fetch('/api/hide/' + encodeURIComponent(key), { method: isHidden ? 'DELETE' : 'POST' });
+        if (isHidden) {
+          btn.dataset.hidden = '0';
+          btn.innerHTML = eyeSvg(false);
+          cardEl.classList.remove('opacity-40', 'grayscale');
+          btn.title = 'Hide this product';
+        } else {
+          btn.dataset.hidden = '1';
+          btn.innerHTML = eyeSvg(true);
+          cardEl.classList.add('opacity-40', 'grayscale');
+          btn.title = 'Unhide this product';
+        }
+      } catch (_) {}
+    }
+
+    async function toggleWishlist(sku, btn) {
+      const key = normSku(sku);
+      if (!key) return;
+      const inList = wishlistSet.has(key);
+      try {
+        await fetch('/api/wishlist/' + encodeURIComponent(key), { method: inList ? 'DELETE' : 'POST' });
+        if (inList) wishlistSet.delete(key); else wishlistSet.add(key);
+        btn.dataset.filled = inList ? '0' : '1';
+        btn.innerHTML = heartSvg(!inList);
+      } catch (_) {}
+    }
+
+    function eyeSvg(closed) {
+      if (closed) {
+        return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+          <line stroke-linecap="round" stroke-linejoin="round" x1="1" y1="1" x2="23" y2="23"/>
+        </svg>`;
+      }
+      return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>`;
+    }
+
+    function heartSvg(filled) {
+      const fill = filled ? 'currentColor' : 'none';
+      return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="${fill}" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.534-7-10a4 4 0 0 1 7-2.646A4 4 0 0 1 19 11c0 5.466-7 10-7 10z"/>
+      </svg>`;
+    }
 
     const fmt = (n) => (typeof n === 'number') ? '£' + n.toFixed(2) : '';
     const esc = (s) => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-    function offerRow(o) {
+    function offerRow(o, dim) {
       // o has retailer name + icon + slug always; price/url/in_stock may be missing.
       const inner = `
         <span class="flex items-center gap-2 min-w-0">
-          <img src="${esc(o.retailer_icon)}" class="w-4 h-4 object-contain shrink-0" alt="" />
-          <span class="truncate">${esc(o.retailer)}</span>
+          <img src="${esc(o.retailer_icon)}" class="w-4 h-4 object-contain shrink-0 ${dim ? 'opacity-40' : ''}" alt="" />
+          <span class="truncate ${dim ? 'text-gray-400' : ''}">${esc(o.retailer)}</span>
         </span>`;
       if (!o.found) {
-        return `<div class="flex items-center justify-between gap-2 py-1 px-2 text-sm text-gray-400">
+        return `<div class="flex items-center justify-between gap-2 py-0.5 px-2 text-sm text-gray-400">
           ${inner}<span class="italic">Not found</span></div>`;
       }
       if (!o.in_stock) {
         return `<a href="${esc(o.url)}" target="_blank" rel="noopener"
-          class="flex items-center justify-between gap-2 py-1 px-2 hover:bg-gray-50 rounded text-sm text-gray-500">
+          class="flex items-center justify-between gap-2 py-0.5 px-2 hover:bg-gray-50 rounded text-sm text-gray-500">
           ${inner}<span class="italic">No stock</span></a>`;
       }
+      const priceClass = dim ? 'font-medium text-gray-400' : 'font-medium';
       return `<a href="${esc(o.url)}" target="_blank" rel="noopener"
-        class="flex items-center justify-between gap-2 py-1 px-2 hover:bg-gray-50 rounded text-sm">
-        ${inner}<span class="font-medium">${fmt(o.price)}</span></a>`;
+        class="flex items-center justify-between gap-2 py-0.5 px-2 hover:bg-gray-50 rounded text-sm">
+        ${inner}<span class="${priceClass}">${fmt(o.price)}</span></a>`;
     }
+
+    const FREE_SHIP_THRESHOLD = {
+      wayland: 20,
+      firestorm: 60,
+      goblin: 75,
+      element: 80,
+      overlord: 75,
+    };
 
     function buildOffers(group, allRetailers) {
       const bySlug = new Map((group.offers || []).map(o => [o.retailer_slug, o]));
-      return allRetailers.map(r => {
+      const rows = allRetailers.map(r => {
         const found = bySlug.get(r.slug);
         if (found) return { ...found, found: true };
         return {
@@ -100,10 +187,55 @@
           found: false,
         };
       });
+      // Sort: in-stock by price asc, then out-of-stock, then not-found.
+      rows.sort((a, b) => {
+        const rank = (o) => {
+          if (!o.found) return 2;
+          if (!o.in_stock) return 1;
+          return 0;
+        };
+        const ra = rank(a), rb = rank(b);
+        if (ra !== rb) return ra - rb;
+        if (ra === 0) {
+          const pa = typeof a.price === 'number' ? a.price : Infinity;
+          const pb = typeof b.price === 'number' ? b.price : Infinity;
+          if (pa !== pb) return pa - pb;
+          const ta = FREE_SHIP_THRESHOLD[a.retailer_slug] ?? Infinity;
+          const tb = FREE_SHIP_THRESHOLD[b.retailer_slug] ?? Infinity;
+          return ta - tb;
+        }
+        return 0;
+      });
+      return rows;
     }
 
     function card(g, allRetailers) {
-      const offers = buildOffers(g, allRetailers).map(offerRow).join('');
+      const rows = buildOffers(g, allRetailers);
+      // When a store is selected, dim rows for other retailers, and gray out
+      // the whole card if the selected store has no in-stock offer for it.
+      const sel = selectedStore;
+      const selectedRow = sel ? rows.find(r => r.retailer_slug === sel) : null;
+      const cardDimmed = !!sel && !(selectedRow && selectedRow.found && selectedRow.in_stock);
+      // Show top 3 retailers per card, or all when expanded. If a store is selected, ensure its row is included.
+      let shown;
+      if (cardsExpanded) {
+        shown = rows;
+      } else {
+        shown = rows.slice(0, 3);
+        if (sel && !shown.some(r => r.retailer_slug === sel)) {
+          const selRow = rows.find(r => r.retailer_slug === sel);
+          if (selRow) shown = [...shown.slice(0, 2), selRow];
+        }
+      }
+      const offers = shown.map(r => offerRow(r, !!sel && r.retailer_slug !== sel)).join('');
+      const canExpand = rows.length > 3;
+      const toggleBar = canExpand ? `
+        <button type="button" class="expand-toggle w-full text-gray-500 hover:bg-gray-50 hover:text-gray-800 py-0 flex items-center justify-center"
+          aria-label="${cardsExpanded ? 'Collapse' : 'Expand'}">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path d="${cardsExpanded ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'}"/>
+          </svg>
+        </button>` : '';
       const hasStock = g.any_in_stock;
       const stickerInner = hasStock
         ? `<div class="font-extrabold text-sm leading-none">${fmt(g.cheapest_price)}</div>`
@@ -117,31 +249,334 @@
         ? `<a href="${esc(g.cheapest_url)}" target="_blank" rel="noopener" class="block w-full h-full">${imgInner}</a>`
         : imgInner;
 
+      const firstSku = (g.skus && g.skus[0]) || null;
+      const heartFilled = firstSku ? wishlistSet.has(normSku(firstSku)) : false;
+      const heartBtn = firstSku ? `
+        <button type="button" class="heart-btn absolute top-2 left-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-red-600 hover:bg-white shadow"
+          data-sku="${esc(firstSku)}" data-filled="${heartFilled ? '1' : '0'}"
+          title="${heartFilled ? 'Remove from wishlist' : 'Add to wishlist'}">
+          ${heartSvg(heartFilled)}
+        </button>` : '';
+      const hideBtn = firstSku ? `
+        <button type="button" class="hide-btn absolute top-2 right-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-gray-600 hover:bg-white shadow opacity-0 transition-opacity"
+          data-sku="${esc(firstSku)}" data-hidden="0"
+          title="Hide this product">
+          ${eyeSvg(false)}
+        </button>` : '';
       return `
-        <div class="bg-white border rounded-lg overflow-hidden flex flex-col w-72">
+        <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col w-72 ${cardDimmed ? 'opacity-40 grayscale' : ''}">
           <div class="relative" style="height:240px">
             ${imgWrap}
+            ${heartBtn}
+            ${hideBtn}
             <div class="sticker absolute bottom-8 right-3 w-16 h-16 flex flex-col items-center justify-center text-stone-900"
                  title="${esc(g.cheapest_retailer || '')}">
               ${stickerInner}
             </div>
           </div>
-          <div class="p-3 flex flex-col gap-2 flex-1">
+          <div class="px-3 pt-1 ${canExpand ? 'pb-0' : 'pb-3'} flex flex-col gap-1 flex-1">
             <div class="font-medium text-sm leading-snug line-clamp-2" title="${esc(g.title)}">${esc(g.title)}</div>
+            ${(g.skus && g.skus.length) ? `<div class="text-xs text-gray-500 font-mono truncate" title="${esc(g.skus.join(', '))}">${esc(g.skus.join(', '))}</div>` : ''}
             <div class="flex flex-col gap-0.5 mt-auto">${offers}</div>
+          </div>
+          ${toggleBar}
+        </div>`;
+    }
+
+    function productCard(p) {
+      const sku = (p.sku || '').trim();
+      const click = sku ? `onclick="openSearch(${JSON.stringify(sku).replace(/"/g, '&quot;')})"` : '';
+      const imgInner = p.image_url
+        ? `<img src="${esc(p.image_url)}" class="w-full h-full object-contain" alt="${esc(p.title)}" />`
+        : `<div class="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">no image</div>`;
+      const retailerPrices = Object.values(p.prices || {})
+        .map(e => e && typeof e === 'object' ? e.price : e)
+        .filter(v => typeof v === 'number');
+      const cheapestRetailer = retailerPrices.length ? Math.min(...retailerPrices) : null;
+      const displayPrice = cheapestRetailer ?? (typeof p.price === 'number' ? p.price : null);
+      const livePrice = cheapestRetailer !== null;
+      const stickerBg = livePrice
+        ? 'background: radial-gradient(circle at 30% 25%, #f0fdf4 0%, #dcfce7 70%, #86efac 100%)'
+        : '';
+      const sticker = displayPrice !== null
+        ? `<div class="sticker absolute bottom-8 right-3 w-16 h-16 flex flex-col items-center justify-center text-stone-900"
+               style="${stickerBg}">
+             <div class="font-extrabold text-sm leading-none">${fmt(displayPrice)}</div>
+           </div>` : '';
+      const heartFilled = sku ? wishlistSet.has(normSku(sku)) : false;
+      const heartBtn = sku ? `
+        <button type="button" class="heart-btn absolute top-2 left-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-red-600 hover:bg-white shadow"
+          data-sku="${esc(sku)}" data-filled="${heartFilled ? '1' : '0'}"
+          title="${heartFilled ? 'Remove from wishlist' : 'Add to wishlist'}">
+          ${heartSvg(heartFilled)}
+        </button>` : '';
+      const hideBtn = sku ? `
+        <button type="button" class="hide-btn absolute top-2 right-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-gray-600 hover:bg-white shadow opacity-0 transition-opacity"
+          data-sku="${esc(sku)}" data-hidden="0"
+          title="Hide this product">
+          ${eyeSvg(false)}
+        </button>` : '';
+      return `
+        <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col w-72 cursor-pointer hover:shadow-md transition-shadow" ${click}>
+          <div class="relative" style="height:240px">
+            ${imgInner}
+            ${heartBtn}
+            ${hideBtn}
+            ${sticker}
+          </div>
+          <div class="px-3 pt-1 pb-2 flex flex-col gap-0.5 flex-1">
+            <div class="font-medium text-sm leading-snug line-clamp-2" title="${esc(p.title)}">${esc(p.title)}</div>
+            ${sku ? `<div class="text-xs text-gray-500 font-mono">${esc(sku)}</div>` : ''}
           </div>
         </div>`;
     }
 
+    async function loadRange(manSlug, rangeSlug, container) {
+      container.innerHTML = '<div class="text-sm text-gray-500 px-2">Loading…</div>';
+      try {
+        const r = await fetch(`/manufacturer/${encodeURIComponent(manSlug)}/${encodeURIComponent(rangeSlug)}`);
+        const data = await r.json();
+        if (data.error) {
+          container.innerHTML = `<div class="text-sm text-red-700 px-2">${esc(data.error)}</div>`;
+          return;
+        }
+        const products = data.products || [];
+        if (!products.length) {
+          container.innerHTML = `<div class="text-sm text-gray-500 px-2">No products.</div>`;
+          return;
+        }
+        container.innerHTML = `<div class="flex flex-wrap justify-center gap-4">${products.map(productCard).join('')}</div>`;
+        container.querySelectorAll('.heart-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            toggleWishlist(btn.dataset.sku, btn);
+          });
+        });
+        container.querySelectorAll('.hide-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const card = btn.closest('.card-wrap');
+            toggleHide(btn.dataset.sku, btn, card);
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="text-sm text-red-700 px-2">${esc(String(err))}</div>`;
+      }
+    }
+
+    function openSearch(q) {
+      window.open('/?q=' + encodeURIComponent(q), '_blank', 'noopener');
+    }
+
+    function searchFor(q) {
+      qEl.value = q;
+      const url = '/?q=' + encodeURIComponent(q);
+      history.pushState({q}, '', url);
+      runSearch(q);
+    }
+
+    function wishlistItemToGroup(item, retailers) {
+      const bySlug = new Map(retailers.map(r => [r.slug, r]));
+      const offers = [];
+      for (const [slug, entry] of Object.entries(item.prices || {})) {
+        const r = bySlug.get(slug);
+        if (!r) continue;
+        const price = entry && typeof entry === 'object' ? entry.price : entry;
+        const url = entry && typeof entry === 'object' ? entry.url : null;
+        offers.push({
+          retailer: r.name,
+          retailer_slug: slug,
+          retailer_icon: r.icon,
+          url,
+          price: typeof price === 'number' ? price : null,
+          in_stock: typeof price === 'number',
+        });
+      }
+      const inStock = offers.filter(o => o.in_stock);
+      inStock.sort((a, b) => a.price - b.price);
+      const cheapest = inStock[0];
+      return {
+        key: 'sku:' + item.sku,
+        title: item.title || item.sku,
+        image_url: item.image_url,
+        skus: [item.sku],
+        offers,
+        cheapest_price: cheapest ? cheapest.price : null,
+        cheapest_url: cheapest ? cheapest.url : null,
+        cheapest_retailer: cheapest ? cheapest.retailer : null,
+        cheapest_retailer_icon: cheapest ? cheapest.retailer_icon : null,
+        any_in_stock: !!cheapest,
+      };
+    }
+
+    async function showWishlist() {
+      manufacturers.innerHTML = '';
+      errors.textContent = '';
+      storeFilters.innerHTML = '';
+      selectedStore = null;
+      grid.innerHTML = '<div class="text-sm text-gray-500 px-2">Loading…</div>';
+      try {
+        const r = await fetch('/api/wishlist');
+        const data = await r.json();
+        const items = data.items || [];
+        lastRetailers = data.retailers || [];
+        lastGroups = items.map(it => wishlistItemToGroup(it, lastRetailers));
+        renderStoreFilters();
+        if (!lastGroups.length) {
+          grid.innerHTML = '<div class="text-sm text-gray-500 px-2">Wishlist is empty. Click a heart on a product to add it.</div>';
+          return;
+        }
+        renderGrid();
+      } catch (err) {
+        grid.innerHTML = `<div class="text-sm text-red-700 px-2">${esc(String(err))}</div>`;
+      }
+    }
+
+    async function showManufacturers() {
+      grid.innerHTML = '';
+      errors.textContent = '';
+      storeFilters.innerHTML = '';
+      selectedStore = null;
+      lastGroups = [];
+      lastRetailers = [];
+      manufacturers.innerHTML = '<div class="text-sm text-gray-500">Loading…</div>';
+      try {
+        const r = await fetch('/manufacturers');
+        const data = await r.json();
+        const mans = data.manufacturers || [];
+        const pill = (manSlug, r) => `<span class="range-pill inline-flex items-center border rounded-full text-sm overflow-hidden">
+          <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}"
+            class="range-btn px-3 py-1 hover:bg-gray-100">${esc(r.name)}</button>
+          <button type="button" data-q="${esc(r.name)}" title="Search retailers for ${esc(r.name)}"
+            class="range-search px-2 py-1 border-l hover:bg-gray-100 text-gray-500 hover:text-gray-800" aria-label="Search">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          </button>
+        </span>`;
+        const renderRanges = (m) => {
+          const hasGroups = (m.ranges || []).some(r => r.group);
+          if (!hasGroups) {
+            return `<div class="flex flex-wrap gap-2 mb-3">${m.ranges.map(r => pill(m.slug, r)).join('')}</div>`;
+          }
+          const groups = [];
+          const byGroup = new Map();
+          for (const r of m.ranges) {
+            const g = r.group || 'Other';
+            if (!byGroup.has(g)) { byGroup.set(g, []); groups.push(g); }
+            byGroup.get(g).push(r);
+          }
+          return groups.map(g => `<div class="mb-3">
+            <div class="text-xs uppercase tracking-wide text-gray-500 mb-1">${esc(g)}</div>
+            <div class="flex flex-wrap gap-2">${byGroup.get(g).map(r => pill(m.slug, r)).join('')}</div>
+          </div>`).join('');
+        };
+        manufacturers.innerHTML = mans.map(m => `
+          <section class="border rounded-lg bg-white p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <img src="${esc(m.icon)}" class="w-5 h-5 object-contain" alt="" />
+              <h2 class="font-semibold">${esc(m.name)}</h2>
+            </div>
+            ${renderRanges(m)}
+            ${m.ranges.map(r => `<div class="range-products mt-2" data-man="${esc(m.slug)}" data-range="${esc(r.slug)}" hidden></div>`).join('')}
+          </section>
+        `).join('');
+
+        manufacturers.querySelectorAll('.range-search').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openSearch(btn.dataset.q);
+          });
+        });
+
+        manufacturers.querySelectorAll('.range-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const man = btn.dataset.man, range = btn.dataset.range;
+            const section = btn.closest('section');
+            section.querySelectorAll('.range-products').forEach(c => {
+              if (c.dataset.man === man && c.dataset.range === range) {
+                c.hidden = !c.hidden;
+                if (!c.hidden && !c.dataset.loaded) {
+                  c.dataset.loaded = '1';
+                  loadRange(man, range, c);
+                }
+              } else {
+                c.hidden = true;
+              }
+            });
+            section.querySelectorAll('.range-btn').forEach(b => {
+              b.classList.toggle('bg-gray-100', b === btn && !section.querySelector(`.range-products[data-man="${man}"][data-range="${range}"]`).hidden);
+            });
+          });
+        });
+      } catch (err) {
+        manufacturers.innerHTML = `<div class="text-sm text-red-700">${esc(String(err))}</div>`;
+      }
+    }
+
+    function renderStoreFilters() {
+      storeFilters.innerHTML = lastRetailers.map(r => `
+        <button type="button" data-slug="${esc(r.slug)}" title="${esc(r.name)}"
+          class="store-filter w-8 h-8 rounded p-0.5 border ${selectedStore === r.slug ? 'border-black bg-white ring-2 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
+          <img src="${esc(r.icon)}" class="w-full h-full object-contain" alt="${esc(r.name)}" />
+        </button>`).join('');
+      storeFilters.querySelectorAll('.store-filter').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const slug = btn.dataset.slug;
+          selectedStore = (selectedStore === slug) ? null : slug;
+          renderStoreFilters();
+          renderGrid();
+        });
+      });
+    }
+
+    function renderGrid() {
+      const sel = selectedStore;
+      const groupHasStock = (g) => {
+        if (!sel) return true;
+        const o = (g.offers || []).find(o => o.retailer_slug === sel);
+        return !!(o && o.in_stock);
+      };
+      const sorted = [...lastGroups].sort((a, b) => {
+        const aOk = groupHasStock(a) ? 0 : 1;
+        const bOk = groupHasStock(b) ? 0 : 1;
+        return aOk - bOk;
+      });
+      grid.innerHTML = sorted.map(g => card(g, lastRetailers)).join('');
+      grid.querySelectorAll('.expand-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          cardsExpanded = !cardsExpanded;
+          renderGrid();
+        });
+      });
+      grid.querySelectorAll('.heart-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          toggleWishlist(btn.dataset.sku, btn);
+        });
+      });
+      grid.querySelectorAll('.hide-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          const card = btn.closest('.card-wrap');
+          toggleHide(btn.dataset.sku, btn, card);
+        });
+      });
+    }
+
     async function runSearch(q) {
+      manufacturers.innerHTML = '';
       grid.innerHTML = '';
       errors.textContent = '';
       try {
         const r = await fetch('/search?q=' + encodeURIComponent(q));
         const data = await r.json();
-        const groups = data.groups || [];
-        const retailers = data.retailers || [];
-        grid.innerHTML = groups.map(g => card(g, retailers)).join('');
+        lastGroups = data.groups || [];
+        lastRetailers = data.retailers || [];
+        renderStoreFilters();
+        renderGrid();
         const errEntries = Object.entries(data.errors || {});
         if (errEntries.length) {
           errors.innerHTML = '<strong>Errors:</strong> ' + errEntries.map(([k,v]) => `${esc(k)}: ${esc(v)}`).join(' · ');
@@ -165,28 +600,68 @@
     window.addEventListener('popstate', () => {
       const q = new URLSearchParams(location.search).get('q') || '';
       qEl.value = q;
-      if (q) runSearch(q); else { grid.innerHTML = ''; }
+      if (location.pathname === '/wishlist') { manufacturers.innerHTML = ''; showWishlist(); return; }
+      if (q) runSearch(q); else { grid.innerHTML = ''; showManufacturers(); }
     });
 
-    // Sidebar toggle
+    // Sidebar: click anywhere on it to open; click outside to close.
     {
       const sb = document.getElementById('sidebar');
       const btn = document.getElementById('sidebar-toggle');
-      btn.addEventListener('click', () => {
-        const open = sb.classList.toggle('translate-x-0');
+      const setOpen = (open) => {
+        sb.classList.toggle('translate-x-0', open);
         sb.classList.toggle('-translate-x-[calc(100%-2.25rem)]', !open);
         btn.textContent = open ? '‹' : '›';
+      };
+      sb.addEventListener('click', (e) => {
+        if (sb.classList.contains('translate-x-0') && e.target === btn) {
+          setOpen(false);
+          return;
+        }
+        setOpen(true);
+      });
+      document.addEventListener('click', (e) => {
+        if (!sb.contains(e.target) && sb.classList.contains('translate-x-0')) {
+          setOpen(false);
+        }
       });
     }
 
-    // Initial load: if URL has ?q=, populate input and run search.
-    {
+    document.getElementById('home-link').addEventListener('click', (e) => {
+      e.preventDefault();
+      qEl.value = '';
+      if (location.pathname + location.search !== '/') {
+        history.pushState({}, '', '/');
+      }
+      grid.innerHTML = '';
+      errors.textContent = '';
+      showManufacturers();
+    });
+
+    document.getElementById('wishlist-link').addEventListener('click', (e) => {
+      e.preventDefault();
+      qEl.value = '';
+      if (location.pathname !== '/wishlist') {
+        history.pushState({}, '', '/wishlist');
+      }
+      manufacturers.innerHTML = '';
+      errors.textContent = '';
+      showWishlist();
+    });
+
+    // Initial load
+    (async () => {
+      await loadWishlistSet();
       const q = new URLSearchParams(location.search).get('q') || '';
-      if (q) {
+      if (location.pathname === '/wishlist') {
+        showWishlist();
+      } else if (q) {
         qEl.value = q;
         runSearch(q);
+      } else {
+        showManufacturers();
       }
-    }
+    })();
   </script>
 </body>
 </html>
