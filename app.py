@@ -55,6 +55,12 @@ _NORM_RE = re.compile(r"[^a-z0-9]+")
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
+def _norm_sku(s: str | None) -> str | None:
+    if not s:
+        return None
+    return s.strip().upper().replace(" ", "").replace("-", "")
+
+
 def _fold(s: str) -> str:
     # Lowercase + strip diacritics so "Raumjäger" == "raumjager".
     return "".join(
@@ -370,10 +376,7 @@ async def search(q: str = Query(..., min_length=1)):
     _persist_search_groups(groups)
     _hidden = set(db.hidden_skus())
     if _hidden:
-        def _primary_sku(g):
-            skus = g.get("skus") or []
-            return skus[0].strip().upper().replace(" ", "").replace("-", "") if skus else None
-        groups = [g for g in groups if _primary_sku(g) not in _hidden]
+        groups = [g for g in groups if _norm_sku((g.get("skus") or [None])[0]) not in _hidden]
     retailers_meta = [
         {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
     ]
@@ -417,7 +420,7 @@ async def manufacturer_range(man_slug: str, range_slug: str):
     products = db.products_for_range(man_slug, range_slug)
     _hidden = set(db.hidden_skus())
     if _hidden:
-        products = [p for p in products if not (p.get("sku") and p["sku"].strip().upper().replace(" ", "").replace("-", "") in _hidden)]
+        products = [p for p in products if _norm_sku(p.get("sku")) not in _hidden]
     payload = {
         "manufacturer": {"slug": module.SLUG, "name": module.NAME, "icon": module.ICON},
         "range": {"slug": range_def["slug"], "name": range_def["name"]},
