@@ -370,13 +370,6 @@
       window.open('/?q=' + encodeURIComponent(q), '_blank', 'noopener');
     }
 
-    function searchFor(q) {
-      qEl.value = q;
-      const url = '/?q=' + encodeURIComponent(q);
-      history.pushState({q}, '', url);
-      runSearch(q);
-    }
-
     function wishlistItemToGroup(item, retailers) {
       const bySlug = new Map(retailers.map(r => [r.slug, r]));
       const offers = [];
