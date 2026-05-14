@@ -180,7 +180,7 @@
         <div class="owned-counter absolute bottom-2 left-2 z-10 flex items-center gap-0.5 bg-white/80 backdrop-blur shadow rounded-full px-1 py-0.5 transition-opacity duration-500 ${visible}"
              data-sku="${esc(sku)}" data-owned="${count}">
           <button type="button" class="owned-dec w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Decrease owned">−</button>
-          <span class="owned-label text-xs font-medium text-gray-800 min-w-[1ch] text-center">${count}</span>
+          <span class="owned-label text-xs font-medium text-gray-800 min-w-[2ch] text-center">${count}</span>
           <button type="button" class="owned-inc w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Increase owned">+</button>
         </div>`;
     }
@@ -540,7 +540,7 @@
         }
         for (const p of products) {
           const sku = normSku(p.sku || '');
-          if (sku && p.owned) ownedMap.set(sku, p.owned);
+          if (sku && p.owned !== undefined) ownedMap.set(sku, p.owned);
         }
         const retailers = data.retailers || [];
         container.innerHTML = `<div class="grid grid-cols-4 gap-2 p-4 pt-0">${products.map(p => productCard(p, retailers)).join('')}</div>`;
@@ -606,7 +606,7 @@
         lastRetailers = data.retailers || [];
         for (const p of items) {
           const sku = normSku(p.sku || '');
-          if (sku && p.owned) ownedMap.set(sku, p.owned);
+          if (sku && p.owned !== undefined) ownedMap.set(sku, p.owned);
         }
         if (!items.length) {
           grid.innerHTML = '<div class="text-sm text-gray-500 px-2">Wishlist is empty. Click a heart on a product to add it.</div>';
@@ -838,7 +838,7 @@
         lastRetailers = data.retailers || [];
         for (const g of lastGroups) {
           const sku = normSku((g.skus || [])[0] || '');
-          if (sku && g.owned) ownedMap.set(sku, g.owned);
+          if (sku && g.owned !== undefined) ownedMap.set(sku, g.owned);
         }
         searchDone = true;
         renderStoreFilters();
