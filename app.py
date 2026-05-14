@@ -437,10 +437,14 @@ async def manufacturer_range(man_slug: str, range_slug: str):
     _hidden = set(db.hidden_skus())
     if _hidden:
         products = [p for p in products if _norm_sku(p.get("sku")) not in _hidden]
+    retailers_meta = [
+        {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
+    ]
     payload = {
         "manufacturer": {"slug": module.SLUG, "name": module.NAME, "icon": module.ICON},
         "range": {"slug": range_def["slug"], "name": range_def["name"]},
         "products": products,
+        "retailers": retailers_meta,
     }
     return JSONResponse(payload)
 
