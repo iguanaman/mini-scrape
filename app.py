@@ -405,23 +405,11 @@ async def search(q: str = Query(..., min_length=1)):
 @app.get("/manufacturers")
 async def manufacturers_index():
     hidden = db.get_hidden_ranges()
-    out = []
-    for m in MANUFACTURERS:
-        out.append({
-            "slug": m.SLUG,
-            "name": m.NAME,
-            "icon": m.ICON,
-            "ranges": [
-                {
-                    "slug": r["slug"],
-                    "name": r["name"],
-                    "group": r.get("group"),
-                    "hidden": (m.SLUG, r["slug"]) in hidden,
-                }
-                for r in m.RANGES
-            ],
-        })
-    return JSONResponse({"manufacturers": out})
+    mfrs = db.manufacturers_with_ranges()
+    for m in mfrs:
+        for r in m["ranges"]:
+            r["hidden"] = (m["slug"], r["slug"]) in hidden
+    return JSONResponse({"manufacturers": mfrs})
 
 
 @app.get("/manufacturer/{man_slug}/{range_slug}")

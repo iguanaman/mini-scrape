@@ -14,16 +14,25 @@ CREATE TABLE IF NOT EXISTS products (
     sku TEXT PRIMARY KEY,
     title TEXT,
     image_url TEXT,
-    url TEXT,
     manufacturer_slug TEXT,
     range_slug TEXT,
-    range_name TEXT,
-    range_group TEXT,
-    manufacturer_price REAL,
     prices_json TEXT,
     minis INTEGER,
     wishlisted_at TEXT,
+    hidden INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS manufacturers (
+    slug TEXT PRIMARY KEY,
+    name TEXT,
+    icon TEXT
+);
+CREATE TABLE IF NOT EXISTS ranges (
+    slug TEXT NOT NULL,
+    manufacturer_slug TEXT NOT NULL REFERENCES manufacturers(slug),
+    name TEXT,
+    grp TEXT,
+    PRIMARY KEY (slug, manufacturer_slug)
 );
 CREATE TABLE IF NOT EXISTS hidden_ranges (
     man_slug   TEXT NOT NULL,
@@ -42,11 +51,19 @@ def _conn() -> sqlite3.Connection:
 def init() -> None:
     with _conn() as c:
         c.executescript(_SCHEMA)
-        # Idempotent migration: add hidden column if not present
-        try:
-            c.execute("ALTER TABLE products ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
-        except Exception:
-            pass  # column already exists
+        # Idempotent migrations
+        for stmt in (
+            "ALTER TABLE products ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0",
+        ):
+            try:
+                c.execute(stmt)
+            except Exception:
+                pass
+        # Drop obsolete columns from products (SQLite 3.35+)
+        cols = {row[1] for row in c.execute("PRAGMA table_info(products)")}
+        for col in ("url", "range_name", "range_group", "manufacturer_price"):
+            if col in cols:
+                c.execute(f"ALTER TABLE products DROP COLUMN {col}")
 
 
 def _now() -> str:
@@ -78,32 +95,46 @@ def upsert_from_retailer(sku: str, title: str | None, image_url: str | None,
         )
 
 
+def upsert_manufacturer(slug: str, name: str, icon: str) -> None:
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO manufacturers (slug, name, icon) VALUES (?, ?, ?)
+               ON CONFLICT(slug) DO UPDATE SET
+                 name = excluded.name,
+                 icon = excluded.icon""",
+            (slug, name, icon),
+        )
+
+
+def upsert_range(slug: str, manufacturer_slug: str, name: str, group: str | None) -> None:
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO ranges (slug, manufacturer_slug, name, grp) VALUES (?, ?, ?, ?)
+               ON CONFLICT(slug, manufacturer_slug) DO UPDATE SET
+                 name = excluded.name,
+                 grp = excluded.grp""",
+            (slug, manufacturer_slug, name, group),
+        )
+
+
 def upsert_from_manufacturer(sku: str, title: str | None, image_url: str | None,
-                             url: str | None, manufacturer_slug: str,
-                             range_slug: str | None, range_name: str | None,
-                             range_group: str | None, price: float | None) -> None:
+                             manufacturer_slug: str, range_slug: str | None) -> None:
     key = _norm_sku(sku)
     if not key:
         return
     now = _now()
     with _conn() as c:
         c.execute(
-            """INSERT INTO products (sku, title, image_url, url, manufacturer_slug,
-                                     range_slug, range_name, range_group,
-                                     manufacturer_price, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """INSERT INTO products (sku, title, image_url, manufacturer_slug,
+                                     range_slug, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)
                ON CONFLICT(sku) DO UPDATE SET
                  title = COALESCE(excluded.title, products.title),
                  image_url = COALESCE(excluded.image_url, products.image_url),
-                 url = COALESCE(excluded.url, products.url),
                  manufacturer_slug = excluded.manufacturer_slug,
                  range_slug = excluded.range_slug,
-                 range_name = excluded.range_name,
-                 range_group = excluded.range_group,
-                 manufacturer_price = excluded.manufacturer_price,
                  updated_at = excluded.updated_at""",
-            (key, title, image_url, url, manufacturer_slug, range_slug, range_name,
-             range_group, price, now),
+            (key, title, image_url, manufacturer_slug, range_slug, now),
         )
 
 
@@ -192,10 +223,38 @@ def hidden_skus() -> list[str]:
     return [r["sku"] for r in rows]
 
 
+def manufacturers_with_ranges() -> list[dict]:
+    with _conn() as c:
+        mfrs = c.execute(
+            "SELECT slug, name, icon FROM manufacturers ORDER BY name"
+        ).fetchall()
+        ranges = c.execute(
+            """SELECT r.slug, r.manufacturer_slug, r.name, r.grp
+               FROM ranges r
+               ORDER BY r.manufacturer_slug, r.name"""
+        ).fetchall()
+    by_man: dict[str, list] = {}
+    for r in ranges:
+        by_man.setdefault(r["manufacturer_slug"], []).append({
+            "slug": r["slug"],
+            "name": r["name"],
+            "group": r["grp"],
+        })
+    out = []
+    for m in mfrs:
+        out.append({
+            "slug": m["slug"],
+            "name": m["name"],
+            "icon": m["icon"],
+            "ranges": by_man.get(m["slug"], []),
+        })
+    return out
+
+
 def products_for_range(manufacturer_slug: str, range_slug: str) -> list[dict]:
     with _conn() as c:
         rows = c.execute(
-            """SELECT sku, title, image_url, url, manufacturer_price, prices_json
+            """SELECT sku, title, image_url, prices_json
                FROM products
                WHERE manufacturer_slug = ? AND range_slug = ?
                ORDER BY COALESCE(sku, title)""",
@@ -213,8 +272,6 @@ def products_for_range(manufacturer_slug: str, range_slug: str) -> list[dict]:
             "sku": r["sku"],
             "title": r["title"],
             "image_url": r["image_url"],
-            "url": r["url"],
-            "price": r["manufacturer_price"],
             "prices": prices,
         })
     return out
@@ -232,8 +289,7 @@ def wishlist_products() -> list[dict]:
     with _conn() as c:
         rows = c.execute(
             """SELECT sku, title, image_url, manufacturer_slug,
-                      manufacturer_price, prices_json, minis, updated_at,
-                      wishlisted_at
+                      prices_json, minis, updated_at, wishlisted_at
                FROM products
                WHERE wishlisted_at IS NOT NULL
                ORDER BY wishlisted_at DESC"""
@@ -251,7 +307,6 @@ def wishlist_products() -> list[dict]:
             "title": r["title"],
             "image_url": r["image_url"],
             "manufacturer_slug": r["manufacturer_slug"],
-            "manufacturer_price": r["manufacturer_price"],
             "prices": prices,
             "minis": r["minis"],
             "updated_at": r["updated_at"],

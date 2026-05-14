@@ -535,40 +535,6 @@
       window.open('/?q=' + encodeURIComponent(q), '_blank', 'noopener');
     }
 
-    function wishlistItemToGroup(item, retailers) {
-      const bySlug = new Map(retailers.map(r => [r.slug, r]));
-      const offers = [];
-      for (const [slug, entry] of Object.entries(item.prices || {})) {
-        const r = bySlug.get(slug);
-        if (!r) continue;
-        const price = entry && typeof entry === 'object' ? entry.price : entry;
-        const url = entry && typeof entry === 'object' ? entry.url : null;
-        offers.push({
-          retailer: r.name,
-          retailer_slug: slug,
-          retailer_icon: r.icon,
-          url,
-          price: typeof price === 'number' ? price : null,
-          in_stock: typeof price === 'number',
-        });
-      }
-      const inStock = offers.filter(o => o.in_stock);
-      inStock.sort((a, b) => a.price - b.price);
-      const cheapest = inStock[0];
-      return {
-        key: 'sku:' + item.sku,
-        title: item.title || item.sku,
-        image_url: item.image_url,
-        skus: [item.sku],
-        offers,
-        cheapest_price: cheapest ? cheapest.price : null,
-        cheapest_url: cheapest ? cheapest.url : null,
-        cheapest_retailer: cheapest ? cheapest.retailer : null,
-        cheapest_retailer_icon: cheapest ? cheapest.retailer_icon : null,
-        any_in_stock: !!cheapest,
-      };
-    }
-
     async function showWishlist() {
       manufacturers.innerHTML = '';
       errors.textContent = '';
@@ -580,13 +546,46 @@
         const data = await r.json();
         const items = data.items || [];
         lastRetailers = data.retailers || [];
-        lastGroups = items.map(it => wishlistItemToGroup(it, lastRetailers));
-        renderStoreFilters();
-        if (!lastGroups.length) {
+        if (!items.length) {
           grid.innerHTML = '<div class="text-sm text-gray-500 px-2">Wishlist is empty. Click a heart on a product to add it.</div>';
           return;
         }
-        renderGrid();
+        const container = document.createElement('div');
+        container.className = 'grid grid-cols-4 gap-2 p-4 pt-0';
+        container.innerHTML = items.map(p => productCard(p, lastRetailers)).join('');
+        grid.innerHTML = '';
+        grid.appendChild(container);
+        container.querySelectorAll('.heart-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            toggleWishlist(btn.dataset.sku, btn);
+          });
+        });
+        container.querySelectorAll('.hide-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            const card = btn.closest('.card-wrap');
+            toggleHide(btn.dataset.sku, btn, card);
+          });
+        });
+        container.querySelectorAll('.card-wrap').forEach(cardEl => {
+          cardEl.addEventListener('click', (e) => {
+            if (e.target.closest('.heart-btn, .hide-btn')) return;
+            const sku = cardEl.dataset.sku;
+            if (!sku) return;
+            const state = cardEl.dataset.priceState;
+            if (state === 'loading') return;
+            if (cardEl.dataset.hasPrices === '1') {
+              const sec = cardEl.querySelector('.offers-section');
+              if (sec) sec.style.display = sec.style.display === 'none' ? 'flex' : 'none';
+              return;
+            }
+            if (state === 'loaded') { openSearch(sku); return; }
+            enqueueCardPriceFetch(cardEl, sku);
+          });
+        });
       } catch (err) {
         grid.innerHTML = `<div class="text-sm text-red-700 px-2">${esc(String(err))}</div>`;
       }

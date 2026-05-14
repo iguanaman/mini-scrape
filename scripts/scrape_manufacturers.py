@@ -42,8 +42,6 @@ RETRY_DELAY_MAX = 4.0
 
 def _persist(man_slug: str, range_def: dict, products: list[dict]) -> int:
     range_slug = range_def["slug"]
-    range_name = range_def.get("name")
-    range_group = range_def.get("group")
     n = 0
     for p in products:
         sku = p.get("sku")
@@ -51,8 +49,8 @@ def _persist(man_slug: str, range_def: dict, products: list[dict]) -> int:
             continue
         try:
             db.upsert_from_manufacturer(
-                sku, p.get("title"), p.get("image_url"), p.get("url"),
-                man_slug, range_slug, range_name, range_group, p.get("price")
+                sku, p.get("title"), p.get("image_url"),
+                man_slug, range_slug,
             )
             n += 1
         except Exception:
@@ -93,6 +91,9 @@ class _ThrottledSession:
 
 async def scrape_manufacturer(module) -> tuple[str, int, int, int]:
     """Returns (slug, ranges_ok, ranges_failed, products_upserted)."""
+    db.upsert_manufacturer(module.SLUG, module.NAME, module.ICON)
+    for range_def in module.RANGES:
+        db.upsert_range(range_def["slug"], module.SLUG, range_def.get("name", ""), range_def.get("group"))
     ok = fail = total = 0
     async with AsyncSession(impersonate=IMPERSONATE, timeout=TIMEOUT) as raw:
         client = _ThrottledSession(raw)
