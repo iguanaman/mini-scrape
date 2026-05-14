@@ -6,6 +6,10 @@ from pathlib import Path
 DB_PATH = Path(__file__).resolve().parent / "main.db"
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
 CREATE TABLE IF NOT EXISTS products (
     sku TEXT PRIMARY KEY,
     title TEXT,
@@ -20,6 +24,11 @@ CREATE TABLE IF NOT EXISTS products (
     minis INTEGER,
     wishlisted_at TEXT,
     updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS hidden_ranges (
+    man_slug   TEXT NOT NULL,
+    range_slug TEXT NOT NULL,
+    PRIMARY KEY (man_slug, range_slug)
 );
 """
 
@@ -62,7 +71,7 @@ def upsert_from_retailer(sku: str, title: str | None, image_url: str | None,
                VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(sku) DO UPDATE SET
                  title = COALESCE(excluded.title, products.title),
-                 image_url = COALESCE(excluded.image_url, products.image_url),
+                 image_url = COALESCE(products.image_url, excluded.image_url),
                  prices_json = excluded.prices_json,
                  updated_at = excluded.updated_at""",
             (key, title, image_url, payload, now),
@@ -140,6 +149,39 @@ def unhide_product(sku: str) -> None:
         return
     with _conn() as c:
         c.execute("UPDATE products SET hidden = 0 WHERE sku = ?", (key,))
+
+
+def hide_range(man_slug: str, range_slug: str) -> None:
+    with _conn() as c:
+        c.execute(
+            "INSERT OR IGNORE INTO hidden_ranges (man_slug, range_slug) VALUES (?, ?)",
+            (man_slug, range_slug),
+        )
+
+
+def unhide_range(man_slug: str, range_slug: str) -> None:
+    with _conn() as c:
+        c.execute(
+            "DELETE FROM hidden_ranges WHERE man_slug = ? AND range_slug = ?",
+            (man_slug, range_slug),
+        )
+
+
+def get_hidden_ranges() -> set[tuple[str, str]]:
+    with _conn() as c:
+        rows = c.execute("SELECT man_slug, range_slug FROM hidden_ranges").fetchall()
+    return {(r["man_slug"], r["range_slug"]) for r in rows}
+
+
+def get_meta(key: str) -> str | None:
+    with _conn() as c:
+        row = c.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def set_meta(key: str, value: str) -> None:
+    with _conn() as c:
+        c.execute("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
 
 
 def hidden_skus() -> list[str]:
