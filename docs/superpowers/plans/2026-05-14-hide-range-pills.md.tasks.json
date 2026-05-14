@@ -1,0 +1,26 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-14-hide-range-pills.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 1: Add hidden_ranges table and db helpers",
+      "status": "pending",
+      "description": "**Goal:** Extend db.py with the hidden_ranges table and three helper functions.\n\n**Files:**\n- Modify: `db.py`\n\n**Acceptance Criteria:**\n- [ ] hidden_ranges table created on startup if absent\n- [ ] hide_range(man_slug, range_slug) inserts a row\n- [ ] unhide_range(man_slug, range_slug) deletes the row\n- [ ] get_hidden_ranges() returns set[tuple[str, str]]\n\n**Verify:** `uv run python -c \"import db; db.init(); db.hide_range('northstar','stargrave'); print(db.get_hidden_ranges()); db.unhide_range('northstar','stargrave'); print(db.get_hidden_ranges())\"`\n\n```json:metadata\n{\"files\": [\"db.py\"], \"verifyCommand\": \"uv run python -c \\\"import db; db.init(); db.hide_range('northstar','stargrave'); print(db.get_hidden_ranges()); db.unhide_range('northstar','stargrave'); print(db.get_hidden_ranges())\\\"\", \"acceptanceCriteria\": [\"hidden_ranges table created on startup if absent\", \"hide_range inserts a row\", \"unhide_range deletes the row\", \"get_hidden_ranges returns set of tuples\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 2: Add API endpoints and update /manufacturers response",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** Wire up two toggle endpoints and include hidden bool in the /manufacturers JSON.\n\n**Files:**\n- Modify: `app.py`\n\n**Acceptance Criteria:**\n- [ ] POST /api/hide-range/{man_slug}/{range_slug} returns {\"ok\": true}\n- [ ] DELETE /api/hide-range/{man_slug}/{range_slug} returns {\"ok\": true}\n- [ ] /manufacturers response: each range dict has a \"hidden\": bool key\n\n**Verify:** curl POST then GET /manufacturers to confirm hidden:true, then DELETE and GET to confirm hidden:false\n\n```json:metadata\n{\"files\": [\"app.py\"], \"verifyCommand\": \"curl -s -X POST http://localhost:8000/api/hide-range/northstar/stargrave && curl -s http://localhost:8000/manufacturers | python -m json.tool | grep hidden\", \"acceptanceCriteria\": [\"POST endpoint persists hidden state\", \"DELETE endpoint clears hidden state\", \"/manufacturers includes hidden bool per range\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 3: Add hide toggle button and greyed styling to range pills",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Add eye-slash button to each pill, apply greyed styling when hidden, wire toggle interaction.\n\n**Files:**\n- Modify: `templates/index.html`\n\n**Acceptance Criteria:**\n- [ ] Each pill has a third eye-slash button\n- [ ] Pills with r.hidden render with data-hidden=1 and opacity-50\n- [ ] Clicking toggles hidden via POST/DELETE and flips data-hidden without re-render\n- [ ] Eye-slash button is darker when pill is hidden\n\n**Verify:** Load home page, click eye-slash on a pill — goes muted. Reload — still muted. Click again — normal.\n\n```json:metadata\n{\"files\": [\"templates/index.html\"], \"verifyCommand\": \"manual browser test\", \"acceptanceCriteria\": [\"Eye-slash button present on every range pill\", \"Hidden pills render with opacity-50\", \"Toggle persists across page reload\", \"Button visually active when hidden\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-14T00:00:00Z"
+}
