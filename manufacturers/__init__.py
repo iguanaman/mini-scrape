@@ -1,3 +1,5 @@
+PRICE_FLOOR = 20
+
 from . import (
     northstar,
     wargamesatlantic,
