@@ -13,17 +13,12 @@
     }
     .sticker {
       transform: rotate(-6deg);
-      background: radial-gradient(circle at 30% 25%, #fffbeb 0%, #fef3c7 70%, #fcd34d 100%);
-      clip-path: polygon(
-        50% 0%, 60% 12%, 73% 7%, 76% 21%, 90% 22%, 86% 36%, 99% 43%,
-        90% 54%, 100% 65%, 86% 71%, 88% 84%, 74% 84%, 71% 97%, 59% 89%,
-        50% 100%, 41% 89%, 29% 97%, 26% 84%, 12% 84%, 14% 71%, 0% 65%,
-        10% 54%, 1% 43%, 14% 36%, 10% 22%, 24% 21%, 27% 7%, 40% 12%
-      );
+      background: radial-gradient(circle at 30% 25%, #eef0ff 0%, #dde0ff 70%, #a5b0f0 100%);
     }
     .card-wrap:hover .hide-btn { opacity: 1; }
     .card-wrap:hover .heart-btn { opacity: 1; }
     .card-wrap:hover .owned-counter { opacity: 1; }
+    .range-pill.category-dim { opacity: 0.35; }
     @keyframes shimmer {
       0%   { transform: translateX(-100%); }
       100% { transform: translateX(100%); }
@@ -95,6 +90,10 @@
       </div>
     </div>
     <div id="errors" class="text-sm text-red-700 empty:hidden"></div>
+    <div id="category-bar" class="hidden items-center gap-2 text-sm">
+      <label for="category-select" class="text-gray-600 shrink-0">Show:</label>
+      <select id="category-select" class="border rounded px-2 py-1 text-sm"></select>
+    </div>
     <div id="manufacturers" class="flex flex-col gap-6 empty:hidden"></div>
     <div id="grid" class="grid grid-cols-4 gap-2 empty:hidden"></div>
   </main>
@@ -106,8 +105,11 @@
     const errors = document.getElementById('errors');
     const manufacturers = document.getElementById('manufacturers');
     const storeFilters = document.getElementById('store-filters');
+    const categoryBar = document.getElementById('category-bar');
+    const categorySelect = document.getElementById('category-select');
 
     let selectedStore = null;
+    let selectedCategory = 'minis';
     let lastGroups = [];
     let lastRetailers = [];
     let searchDone = false;
@@ -229,17 +231,39 @@
     const fmt = (n) => (typeof n === 'number') ? '£' + n.toFixed(2) : '';
     const esc = (s) => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+    const _CLIP_STAR = 'polygon(50% 0%,60% 12%,73% 7%,76% 21%,90% 22%,86% 36%,99% 43%,90% 54%,100% 65%,86% 71%,88% 84%,74% 84%,71% 97%,59% 89%,50% 100%,41% 89%,29% 97%,26% 84%,12% 84%,14% 71%,0% 65%,10% 54%,1% 43%,14% 36%,10% 22%,24% 21%,27% 7%,40% 12%)';
+    const _CLIP_HEX  = 'polygon(50% 0%,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%)';
+    const _CLIP_SHIELD = 'polygon(15% 0%,85% 0%,100% 15%,100% 60%,50% 100%,0% 60%,0% 15%)';
+    const _CLIP_CIRCLE = 'circle(50% at 50% 50%)';
+
+    function stickerStyle(price, minis) {
+      if (!price) {
+        return 'background: radial-gradient(circle at 30% 25%, #eef0ff 0%, #dde0ff 70%, #a5b0f0 100%); clip-path: ' + _CLIP_CIRCLE;
+      }
+      if (!minis) {
+        return 'background: radial-gradient(circle at 30% 25%, #eef0ff 0%, #dde0ff 70%, #a5b0f0 100%); clip-path: ' + _CLIP_CIRCLE;
+      }
+      const ppm = price / minis;
+      const t = Math.min(1, Math.max(0, (ppm - 1.0) / 1.0));
+      const h = Math.round(120 - t * 120);
+      const bg = `background: radial-gradient(circle at 30% 25%, hsl(${h},80%,90%) 0%, hsl(${h},75%,82%) 70%, hsl(${h},70%,65%) 100%)`;
+      let clip;
+      if (ppm <= 1.0)       clip = _CLIP_STAR;
+      else if (ppm <= 1.5)  clip = _CLIP_HEX;
+      else if (ppm <= 2.0)  clip = _CLIP_SHIELD;
+      else                  clip = _CLIP_CIRCLE;
+      return bg + '; clip-path: ' + clip;
+    }
+
     const _priceQueue = [];
     let _priceQueueRunning = false;
 
-    function updateSticker(cardEl, cheapestPrice) {
+    function updateSticker(cardEl, cheapestPrice, minis) {
       const existing = cardEl.querySelector('.sticker');
       const inner = cheapestPrice !== null
-        ? `<div class="font-extrabold text-sm leading-none">${fmt(cheapestPrice)}</div>`
+        ? `<div class="font-extrabold text-sm leading-none">${fmt(cheapestPrice)}</div>${minis ? `<div class="text-xs font-medium leading-none mt-0.5">${fmt(cheapestPrice / minis)}/m</div>` : ''}`
         : `<div class="font-bold text-xs leading-tight text-center">No stock</div>`;
-      const bg = cheapestPrice !== null
-        ? 'background: radial-gradient(circle at 30% 25%, #f0fdf4 0%, #dcfce7 70%, #86efac 100%)'
-        : '';
+      const bg = cheapestPrice !== null ? stickerStyle(cheapestPrice, minis) : '';
       const html = `<div class="sticker absolute bottom-8 right-3 w-16 h-16 flex flex-col items-center justify-center text-stone-900" style="${bg}">${inner}</div>`;
       if (existing) {
         existing.outerHTML = html;
@@ -260,7 +284,9 @@
           const data = await r.json();
           const groups = data.groups || [];
           let cheapest = null;
+          let fetchedMinis = null;
           for (const g of groups) {
+            if (g.minis && fetchedMinis === null) fetchedMinis = g.minis;
             for (const o of (g.offers || [])) {
               if (o.in_stock && typeof o.price === 'number') {
                 if (cheapest === null || o.price < cheapest) cheapest = o.price;
@@ -273,7 +299,7 @@
             if (hideBtn) { hideBtn.dataset.hidden = '1'; hideBtn.innerHTML = eyeSvg(true); hideBtn.title = 'Unhide this product'; }
             cardEl.classList.add('opacity-40', 'grayscale');
           } else {
-            updateSticker(cardEl, cheapest);
+            updateSticker(cardEl, cheapest, fetchedMinis);
           }
           cardEl.dataset.priceState = 'loaded';
         } catch (_) {
@@ -386,7 +412,7 @@
         </button>` : '';
       const hasStock = g.any_in_stock;
       const stickerInner = hasStock
-        ? `<div class="font-extrabold text-sm leading-none">${fmt(g.cheapest_price)}</div>`
+        ? `<div class="font-extrabold text-sm leading-none">${fmt(g.cheapest_price)}</div>${g.minis ? `<div class="text-xs font-medium leading-none mt-0.5">${fmt(g.cheapest_price / g.minis)}/m</div>` : ''}`
         : `<div class="font-bold text-xs leading-tight text-center">No stock</div>`;
 
       const imgInner = g.image_url
@@ -421,7 +447,7 @@
             ${hideBtn}
             ${ownedBtn}
             <div class="sticker absolute bottom-8 right-3 w-16 h-16 flex flex-col items-center justify-center text-stone-900"
-                 style="${hasStock ? 'background: radial-gradient(circle at 30% 25%, #f0fdf4 0%, #dcfce7 70%, #86efac 100%)' : ''}"
+                 style="${hasStock ? stickerStyle(g.cheapest_price, g.minis) : ''}"
                  title="${esc(g.cheapest_retailer || '')}">
               ${stickerInner}
             </div>
@@ -467,13 +493,12 @@
       const hasCachedPrices = !!(allRetailers && allRetailers.length && Object.keys(p.prices || {}).length);
       const livePrice = cheapestRetailer !== null;
       const priceState = livePrice ? 'loaded' : (sku ? 'idle' : 'loaded');
-      const stickerBg = livePrice
-        ? 'background: radial-gradient(circle at 30% 25%, #f0fdf4 0%, #dcfce7 70%, #86efac 100%)'
-        : '';
+      const stickerBg = livePrice ? stickerStyle(displayPrice, p.minis) : '';
       const sticker = displayPrice !== null
         ? `<div class="sticker absolute bottom-8 right-3 w-16 h-16 flex flex-col items-center justify-center text-stone-900"
                style="${stickerBg}">
              <div class="font-extrabold text-sm leading-none">${fmt(displayPrice)}</div>
+             ${p.minis ? `<div class="text-xs font-medium leading-none mt-0.5">${fmt(displayPrice / p.minis)}/m</div>` : ''}
            </div>` : '';
       const heartFilled = sku ? wishlistSet.has(normSku(sku)) : false;
       const heartBtn = sku ? `
@@ -533,6 +558,28 @@
         </div>`;
     }
 
+    function applyCategoryFilter() {
+      const cat = selectedCategory;
+      // Pills: grey out if range has no products matching category
+      manufacturers.querySelectorAll('.range-pill').forEach(pill => {
+        if (cat === 'all') {
+          pill.classList.remove('category-dim');
+        } else {
+          const cats = (pill.dataset.categories || '').split(',').filter(Boolean);
+          const matches = cats.length === 0 || cats.includes(cat);
+          pill.classList.toggle('category-dim', !matches);
+        }
+      });
+      // Cards: hide if category doesn't match
+      manufacturers.querySelectorAll('.card-outer').forEach(outer => {
+        if (cat === 'all') {
+          outer.classList.remove('hidden');
+        } else {
+          outer.classList.toggle('hidden', outer.dataset.category !== cat);
+        }
+      });
+    }
+
     async function loadRange(manSlug, rangeSlug, container) {
       container.innerHTML = '<div class="text-sm text-gray-500 px-2">Loading…</div>';
       try {
@@ -552,7 +599,7 @@
           if (sku && p.owned !== undefined) ownedMap.set(sku, p.owned);
         }
         const retailers = data.retailers || [];
-        container.innerHTML = `<div class="grid grid-cols-4 gap-2 p-4 pt-0">${products.map(p => productCard(p, retailers)).join('')}</div>`;
+        container.innerHTML = `<div class="grid grid-cols-4 gap-2 p-4 pt-0">${products.map(p => `<div class="card-outer" data-category="${esc(p.category || 'unknown')}">${productCard(p, retailers)}</div>`).join('')}</div>`;
         container.querySelectorAll('.heart-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -576,24 +623,34 @@
             const sec = cardEl.querySelector('.offers-section');
             if (!sec) return;
             const opening = sec.style.display === 'none';
-            sec.style.display = opening ? 'flex' : 'none';
-            btn.querySelector('path').setAttribute('d', opening ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6');
-            btn.setAttribute('aria-label', opening ? 'Collapse' : 'Expand');
+            container.querySelectorAll('.card-wrap').forEach(c => {
+              const s = c.querySelector('.offers-section');
+              const b = c.querySelector('.expand-toggle');
+              if (s) s.style.display = opening ? 'flex' : 'none';
+              if (b) {
+                b.querySelector('path').setAttribute('d', opening ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6');
+                b.setAttribute('aria-label', opening ? 'Collapse' : 'Expand');
+              }
+            });
           });
         });
         container.querySelectorAll('.card-wrap').forEach(cardEl => {
           cardEl.addEventListener('click', (e) => {
             if (e.target.closest('.heart-btn, .hide-btn, .owned-counter, .expand-toggle')) return;
-            const manUrl = cardEl.dataset.manUrl;
-            if (manUrl) { window.open(manUrl, '_blank', 'noopener'); return; }
             const sku = cardEl.dataset.sku;
             if (!sku) return;
             const state = cardEl.dataset.priceState;
             if (state === 'loading') return;
-            if (state === 'loaded') { openSearch(sku); return; }
+            if (state === 'loaded') {
+              const manUrl = cardEl.dataset.manUrl;
+              if (manUrl) { window.open(manUrl, '_blank', 'noopener'); return; }
+              openSearch(sku);
+              return;
+            }
             enqueueCardPriceFetch(cardEl, sku);
           });
         });
+        applyCategoryFilter();
       } catch (err) {
         container.innerHTML = `<div class="text-sm text-red-700 px-2">${esc(String(err))}</div>`;
       }
@@ -664,7 +721,12 @@
             if (!sku) return;
             const state = cardEl.dataset.priceState;
             if (state === 'loading') return;
-            if (state === 'loaded') { openSearch(sku); return; }
+            if (state === 'loaded') {
+              const manUrl = cardEl.dataset.manUrl;
+              if (manUrl) { window.open(manUrl, '_blank', 'noopener'); return; }
+              openSearch(sku);
+              return;
+            }
             enqueueCardPriceFetch(cardEl, sku);
           });
         });
@@ -685,7 +747,16 @@
         const r = await fetch('/manufacturers');
         const data = await r.json();
         const mans = data.manufacturers || [];
-        const pill = (manSlug, r) => `<span class="range-pill inline-flex items-center border rounded-full text-sm overflow-hidden${r.hidden ? ' opacity-50' : ''}" data-hidden="${r.hidden ? '1' : '0'}">
+        const catSet = new Set();
+        for (const m of mans) for (const r of (m.ranges || [])) for (const c of (r.categories || [])) catSet.add(c);
+        catSet.delete('unknown');
+        const cats = [...catSet].sort();
+        categorySelect.innerHTML = `<option value="all">All</option>${cats.map(c => `<option value="${esc(c)}"${c === selectedCategory ? ' selected' : ''}>${esc(c.charAt(0).toUpperCase() + c.slice(1))}</option>`).join('')}<option value="unknown"${selectedCategory === 'unknown' ? ' selected' : ''}>Unknown</option>`;
+        if (!cats.includes(selectedCategory) && selectedCategory !== 'all' && selectedCategory !== 'unknown') {
+          selectedCategory = 'minis';
+          categorySelect.value = 'minis';
+        }
+        const pill = (manSlug, r) => `<span class="range-pill inline-flex items-center border rounded-full text-sm overflow-hidden${r.hidden ? ' opacity-50' : ''}" data-hidden="${r.hidden ? '1' : '0'}" data-categories="${esc((r.categories || []).join(','))}">
           <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}"
             class="range-btn px-3 py-1 hover:bg-gray-100">${esc(r.name)}</button>
           <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}" title="Fetch prices for ${esc(r.name)}"
@@ -726,6 +797,9 @@
             ${m.ranges.map(r => `<div class="range-products mt-2" data-man="${esc(m.slug)}" data-range="${esc(r.slug)}" hidden></div>`).join('')}
           </section>
         `).join('');
+        categoryBar.classList.remove('hidden');
+        categoryBar.classList.add('flex');
+        applyCategoryFilter();
 
         manufacturers.querySelectorAll('.range-queue').forEach(btn => {
           btn.addEventListener('click', async (e) => {
@@ -847,6 +921,8 @@
 
     async function runSearch(q) {
       manufacturers.innerHTML = '';
+      categoryBar.classList.add('hidden');
+      categoryBar.classList.remove('flex');
       grid.innerHTML = '';
       errors.textContent = '';
       searchDone = false;
@@ -914,6 +990,11 @@
         history.pushState({q}, '', url);
       }
       runSearch(q);
+    });
+
+    categorySelect.addEventListener('change', () => {
+      selectedCategory = categorySelect.value;
+      applyCategoryFilter();
     });
 
     window.addEventListener('popstate', () => {
