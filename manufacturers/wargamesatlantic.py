@@ -17,9 +17,12 @@ RANGES = [
 
 
 async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
+    import sys
     handle = range_def["handle"]
     out: list[dict] = []
     page = 1
+    sys.stdout.write("fetching: ")
+    sys.stdout.flush()
     while True:
         url = f"{BASE}/collections/{handle}/products.json"
         r = await client.get(url, params={"limit": 250, "page": page}, timeout=15)
@@ -45,7 +48,11 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
                 "price": price,
                 "description": p.get("body_html") or None,
             })
+        sys.stdout.write(".")
+        sys.stdout.flush()
         if len(products) < 250:
             break
         page += 1
+    sys.stdout.write(f" {len(out)} products\n")
+    sys.stdout.flush()
     return out

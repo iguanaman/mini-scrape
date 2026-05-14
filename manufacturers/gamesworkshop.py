@@ -69,6 +69,7 @@ RANGES = [
 
 
 async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
+    import sys
     filter_str = range_def["filter"]
     headers = {
         "x-algolia-application-id": ALGOLIA_APP_ID,
@@ -77,6 +78,8 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
     }
     out: list[dict] = []
     page = 0
+    sys.stdout.write("fetching: ")
+    sys.stdout.flush()
     while True:
         payload = {
             "filters": filter_str,
@@ -112,8 +115,12 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
                 "price": h.get("price"),
                 "description": h.get("description") or None,
             })
+        sys.stdout.write(".")
+        sys.stdout.flush()
         total_pages = data.get("nbPages", 1)
         if page >= total_pages - 1:
             break
         page += 1
+    sys.stdout.write(f" {len(out)} products\n")
+    sys.stdout.flush()
     return out
