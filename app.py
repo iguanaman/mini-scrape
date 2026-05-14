@@ -15,6 +15,7 @@ from starlette.requests import Request
 
 from retailers import IMPERSONATE
 from retailers import goblin, wayland, firestorm, element, overlord, nemc
+from retailers.wayland import WaylandBlockedError
 from manufacturers import MANUFACTURERS
 import db
 
@@ -313,9 +314,11 @@ def _group_results(items: list[dict], query_tokens: frozenset[str] = frozenset()
     return out
 
 
-def _persist_search_groups(groups: list[dict]) -> None:
+def _persist_search_groups(groups: list[dict], query_sku: str | None = None) -> None:
     for g in groups:
         skus = g.get("skus") or []
+        if not skus and query_sku:
+            skus = [query_sku]
         if not skus:
             continue
         prices: dict[str, dict] = {}
@@ -356,12 +359,16 @@ async def search(q: str = Query(..., min_length=1)):
             *(r.search(q, client) for r in RETAILERS),
             return_exceptions=True,
         )
+    is_sku = _is_sku_query(q)
+    wayland_blocked = False
     for module, outcome in zip(RETAILERS, outcomes):
-        if isinstance(outcome, Exception):
+        if isinstance(outcome, WaylandBlockedError):
+            wayland_blocked = True
+        elif isinstance(outcome, Exception):
             log.exception("Retailer %s failed", module.NAME, exc_info=outcome)
             errors[module.NAME] = f"{type(outcome).__name__}: {outcome}"
         else:
-            results.extend(outcome)
+            results.extend(outcome[:1] if is_sku else outcome)
 
     tokens = _query_tokens(q)
     results = [
@@ -372,8 +379,9 @@ async def search(q: str = Query(..., min_length=1)):
         and r["price"] >= 15
     ]
     results.sort(key=_sort_key)
-    groups = _group_results(results, frozenset(tokens), sku_query=_is_sku_query(q))
-    _persist_search_groups(groups)
+    groups = _group_results(results, frozenset(tokens), sku_query=is_sku)
+    if not errors:
+        _persist_search_groups(groups, query_sku=_norm_sku(q) if is_sku else None)
     _hidden = set(db.hidden_skus())
     if _hidden:
         groups = [g for g in groups if not any(_norm_sku(s) in _hidden for s in (g.get("skus") or []))]
@@ -387,13 +395,16 @@ async def search(q: str = Query(..., min_length=1)):
         "groups": groups,
         "retailers": retailers_meta,
         "errors": errors,
+        "wayland_blocked": wayland_blocked,
     }
-    _cache[key] = (now, payload)
+    if not errors:
+        _cache[key] = (now, payload)
     return JSONResponse(payload)
 
 
 @app.get("/manufacturers")
 async def manufacturers_index():
+    hidden = db.get_hidden_ranges()
     out = []
     for m in MANUFACTURERS:
         out.append({
@@ -401,7 +412,12 @@ async def manufacturers_index():
             "name": m.NAME,
             "icon": m.ICON,
             "ranges": [
-                {"slug": r["slug"], "name": r["name"], "group": r.get("group")}
+                {
+                    "slug": r["slug"],
+                    "name": r["name"],
+                    "group": r.get("group"),
+                    "hidden": (m.SLUG, r["slug"]) in hidden,
+                }
                 for r in m.RANGES
             ],
         })
@@ -464,6 +480,30 @@ async def api_hide(sku: str):
 @app.delete("/api/hide/{sku}")
 async def api_unhide(sku: str):
     db.unhide_product(sku)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/hide-range/{man_slug}/{range_slug}")
+async def api_hide_range(man_slug: str, range_slug: str):
+    db.hide_range(man_slug, range_slug)
+    return JSONResponse({"ok": True})
+
+
+@app.delete("/api/hide-range/{man_slug}/{range_slug}")
+async def api_unhide_range(man_slug: str, range_slug: str):
+    db.unhide_range(man_slug, range_slug)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/wayland-cookies")
+async def wayland_cookies(request: Request):
+    body = await request.json()
+    cookie_str = (body.get("cookies") or "").strip()
+    if not cookie_str:
+        return JSONResponse({"ok": False, "error": "empty"}, status_code=400)
+    db.set_meta("wayland_cookies", cookie_str)
+    # Bust the search cache so next search re-attempts Wayland with new cookies
+    _cache.clear()
     return JSONResponse({"ok": True})
 
 
