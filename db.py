@@ -76,6 +76,9 @@ def _norm_sku(sku: str) -> str:
     return sku.strip().upper().replace(" ", "").replace("-", "")
 
 
+norm_sku = _norm_sku
+
+
 def upsert_from_retailer(sku: str, title: str | None, image_url: str | None,
                          prices: dict) -> None:
     """prices: {retailer_slug: price_or_null} — overwrites prices_json entirely."""

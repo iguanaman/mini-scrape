@@ -11,7 +11,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from starlette.requests import Request
 
 from retailers import IMPERSONATE
@@ -37,7 +37,7 @@ db.init()
 
 
 class OwnedBody(BaseModel):
-    count: int
+    count: int = Field(ge=0)
 
 
 @app.exception_handler(Exception)
@@ -494,10 +494,8 @@ async def api_unhide_range(man_slug: str, range_slug: str):
 
 @app.post("/api/owned/{sku}")
 async def api_set_owned(sku: str, body: OwnedBody):
-    if body.count < 0:
-        return JSONResponse({"error": "count must be >= 0"}, status_code=422)
     saved = db.set_owned(sku, body.count)
-    return JSONResponse({"sku": db._norm_sku(sku), "owned": saved})
+    return JSONResponse({"sku": db.norm_sku(sku), "owned": saved})
 
 
 @app.post("/api/wayland-cookies")
