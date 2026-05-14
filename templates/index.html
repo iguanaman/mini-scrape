@@ -23,6 +23,7 @@
     }
     .card-wrap:hover .hide-btn { opacity: 1; }
     .card-wrap:hover .heart-btn { opacity: 1; }
+    .card-wrap:hover .owned-counter { opacity: 1; }
     @keyframes shimmer {
       0%   { transform: translateX(-100%); }
       100% { transform: translateX(100%); }
@@ -112,6 +113,7 @@
     let searchDone = false;
     let cardsExpanded = false;
     let wishlistSet = new Set();
+    let ownedMap = new Map(); // normSku -> count
 
     async function loadWishlistSet() {
       try {
@@ -172,11 +174,56 @@
       </svg>`;
     }
 
+    function ownedCounter(sku, count) {
+      const visible = count > 0 ? '' : 'opacity-0';
+      return `
+        <div class="owned-counter absolute bottom-2 left-2 z-10 flex items-center gap-0.5 bg-white/80 backdrop-blur shadow rounded-full px-1 py-0.5 transition-opacity duration-500 ${visible}"
+             data-sku="${esc(sku)}" data-owned="${count}">
+          <button type="button" class="owned-dec w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Decrease owned">−</button>
+          <span class="owned-label text-xs font-medium text-gray-800 min-w-[1ch] text-center">${count}</span>
+          <button type="button" class="owned-inc w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Increase owned">+</button>
+        </div>`;
+    }
+
     function heartSvg(filled) {
       const fill = filled ? 'currentColor' : 'none';
       return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="${fill}" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.534-7-10a4 4 0 0 1 7-2.646A4 4 0 0 1 19 11c0 5.466-7 10-7 10z"/>
       </svg>`;
+    }
+
+    async function changeOwned(sku, delta, counterEl) {
+      const key = normSku(sku);
+      if (!key) return;
+      const current = parseInt(counterEl.dataset.owned || '0', 10);
+      const next = Math.max(0, current + delta);
+      try {
+        await fetch('/api/owned/' + encodeURIComponent(key), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ count: next }),
+        });
+        counterEl.dataset.owned = next;
+        counterEl.querySelector('.owned-label').textContent = next;
+        counterEl.classList.toggle('opacity-0', next === 0);
+        ownedMap.set(key, next);
+      } catch (_) {}
+    }
+
+    function bindOwnedCounters(container) {
+      container.querySelectorAll('.owned-counter').forEach(counterEl => {
+        const sku = counterEl.dataset.sku;
+        counterEl.querySelector('.owned-dec').addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          changeOwned(sku, -1, counterEl);
+        });
+        counterEl.querySelector('.owned-inc').addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          changeOwned(sku, 1, counterEl);
+        });
+      });
     }
 
     const fmt = (n) => (typeof n === 'number') ? '£' + n.toFixed(2) : '';
@@ -364,12 +411,15 @@
           title="Hide this product">
           ${eyeSvg(false)}
         </button>` : '';
+      const firstOwnedCount = firstSku ? (ownedMap.get(normSku(firstSku)) || 0) : 0;
+      const ownedBtn = firstSku ? ownedCounter(firstSku, firstOwnedCount) : '';
       return `
         <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col ${cardDimmed ? 'opacity-40 grayscale' : ''}">
           <div class="relative" style="height:240px">
             ${imgWrap}
             ${heartBtn}
             ${hideBtn}
+            ${ownedBtn}
             <div class="sticker absolute bottom-8 right-3 w-16 h-16 flex flex-col items-center justify-center text-stone-900"
                  style="${hasStock ? 'background: radial-gradient(circle at 30% 25%, #f0fdf4 0%, #dcfce7 70%, #86efac 100%)' : ''}"
                  title="${esc(g.cheapest_retailer || '')}">
@@ -438,6 +488,8 @@
           title="Hide this product">
           ${eyeSvg(false)}
         </button>` : '';
+      const ownedCount = (p.owned !== undefined ? p.owned : (ownedMap.get(normSku(sku)) || 0));
+      const ownedBtn = sku ? ownedCounter(sku, ownedCount) : '';
       const clickable = sku ? 'cursor-pointer hover:shadow-md transition-shadow' : '';
 
       let offersHtml = '';
@@ -461,6 +513,7 @@
             ${imgInner}
             ${heartBtn}
             ${hideBtn}
+            ${ownedBtn}
             ${sticker}
           </div>
           <div class="px-3 pt-1 pb-2 flex flex-col gap-0.5 flex-1">
@@ -485,6 +538,10 @@
           container.innerHTML = `<div class="text-sm text-gray-500 px-2">No products.</div>`;
           return;
         }
+        for (const p of products) {
+          const sku = normSku(p.sku || '');
+          if (sku && p.owned) ownedMap.set(sku, p.owned);
+        }
         const retailers = data.retailers || [];
         container.innerHTML = `<div class="grid grid-cols-4 gap-2 p-4 pt-0">${products.map(p => productCard(p, retailers)).join('')}</div>`;
         container.querySelectorAll('.heart-btn').forEach(btn => {
@@ -502,9 +559,10 @@
             toggleHide(btn.dataset.sku, btn, card);
           });
         });
+        bindOwnedCounters(container);
         container.querySelectorAll('.card-wrap').forEach(cardEl => {
           cardEl.addEventListener('click', (e) => {
-            if (e.target.closest('.heart-btn, .hide-btn')) return;
+            if (e.target.closest('.heart-btn, .hide-btn, .owned-counter')) return;
             const sku = cardEl.dataset.sku;
             if (!sku) return;
             const state = cardEl.dataset.priceState;
@@ -546,6 +604,10 @@
         const data = await r.json();
         const items = data.items || [];
         lastRetailers = data.retailers || [];
+        for (const p of items) {
+          const sku = normSku(p.sku || '');
+          if (sku && p.owned) ownedMap.set(sku, p.owned);
+        }
         if (!items.length) {
           grid.innerHTML = '<div class="text-sm text-gray-500 px-2">Wishlist is empty. Click a heart on a product to add it.</div>';
           return;
@@ -570,9 +632,10 @@
             toggleHide(btn.dataset.sku, btn, card);
           });
         });
+        bindOwnedCounters(container);
         container.querySelectorAll('.card-wrap').forEach(cardEl => {
           cardEl.addEventListener('click', (e) => {
-            if (e.target.closest('.heart-btn, .hide-btn')) return;
+            if (e.target.closest('.heart-btn, .hide-btn, .owned-counter')) return;
             const sku = cardEl.dataset.sku;
             if (!sku) return;
             const state = cardEl.dataset.priceState;
@@ -760,6 +823,7 @@
           toggleHide(btn.dataset.sku, btn, card);
         });
       });
+      bindOwnedCounters(grid);
     }
 
     async function runSearch(q) {
@@ -772,6 +836,10 @@
         const data = await r.json();
         lastGroups = data.groups || [];
         lastRetailers = data.retailers || [];
+        for (const g of lastGroups) {
+          const sku = normSku((g.skus || [])[0] || '');
+          if (sku && g.owned) ownedMap.set(sku, g.owned);
+        }
         searchDone = true;
         renderStoreFilters();
         renderGrid();
