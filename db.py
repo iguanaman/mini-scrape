@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS products (
     minis INTEGER,
     wishlisted_at TEXT,
     hidden INTEGER NOT NULL DEFAULT 0,
+    owned INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT
 );
 CREATE TABLE IF NOT EXISTS manufacturers (
