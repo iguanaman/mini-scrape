@@ -38,7 +38,7 @@ async def search(query: str, client: AsyncSession) -> list[dict]:
     tree = HTMLParser(r.text)
 
     out: list[dict] = []
-    for card in tree.css(".productgrid")[:10]:
+    for card in tree.css(".productgrid")[:40]:
         title_el = card.css_first("h3.producttitle")
         title = title_el.text(strip=True) if title_el else None
 
@@ -47,6 +47,9 @@ async def search(query: str, client: AsyncSession) -> list[dict]:
 
         img_el = card.css_first("img.productimage")
         image_url = _abs(img_el.attributes.get("src")) if img_el else None
+        # Listing thumbs are `<id>-small.jpg`; `-large.jpg` is the higher-quality variant.
+        if image_url and image_url.endswith("-small.jpg"):
+            image_url = image_url[: -len("-small.jpg")] + "-large.jpg"
 
         price_el = card.css_first(".price")
         price = _parse_price(price_el.text()) if price_el else None

@@ -1,1 +1,1 @@
-IMPERSONATE = "chrome120"
+IMPERSONATE = "chrome146"

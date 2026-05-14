@@ -34,11 +34,23 @@ def _abs(u: str | None) -> str | None:
 
 
 async def search(query: str, client: AsyncSession) -> list[dict]:
-    r = await client.get(SEARCH_URL, params={"q": query}, timeout=15)
-    r.raise_for_status()
-    tree = HTMLParser(r.text)
+    # Firestorm caps at 20 items per page (?resultpage=N). Fetch 2 pages for ~40.
+    items = []
+    for page in (1, 2):
+        params = {"q": query}
+        if page > 1:
+            params["resultpage"] = page
+        r = await client.get(SEARCH_URL, params=params, timeout=15)
+        r.raise_for_status()
+        page_items = HTMLParser(r.text).css(".product-list .item .item-inner")
+        if not page_items:
+            break
+        items.extend(page_items)
+        if len(page_items) < 20:
+            break
+
     out: list[dict] = []
-    for item in tree.css(".product-list .item .item-inner")[:10]:
+    for item in items[:40]:
         a = item.css_first("a[href]")
         url = _abs(a.attributes.get("href")) if a else None
 

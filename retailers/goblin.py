@@ -1,3 +1,4 @@
+import html
 import json
 import re
 
@@ -68,7 +69,7 @@ async def search(query: str, client: AsyncSession) -> list[dict]:
             "retailer": NAME,
             "retailer_slug": SLUG,
             "retailer_icon": ICON,
-            "title": data.get("name"),
+            "title": html.unescape(data.get("name") or "") or None,
             "url": url,
             "price": price,
             "rrp": None,
@@ -76,6 +77,4 @@ async def search(query: str, client: AsyncSession) -> list[dict]:
             "image_url": _abs_url(image),
             "sku": data.get("sku"),
         })
-        if len(out) >= 10:
-            break
-    return out
+    return out[:40]
