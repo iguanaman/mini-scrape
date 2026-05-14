@@ -21,8 +21,7 @@
         "kind": "build",
         "isDefault": true
       }
-    }
-  ,
+    },
     {
       "label": "Scrape manufacturers",
       "type": "shell",
@@ -35,6 +34,34 @@
         "panel": "dedicated"
       },
       "problemMatcher": []
+    },
+    {
+      "label": "Fill minis",
+      "type": "shell",
+      "command": "uv run python scripts/fill_minis.py",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Llama Server",
+      "type": "shell",
+      "command": "\"/d/Work/github/llama.cpp/llama-server.exe\" -m /d/Work/github/llama.cpp/models/gemma-4-E4B-it-UD-IQ3_XXS.gguf --port 8081 -ngl 99",
+      "icon": { "id": "hubot", "color": "terminal.ansiCyan" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": false
+      }
     }
   ]
 }

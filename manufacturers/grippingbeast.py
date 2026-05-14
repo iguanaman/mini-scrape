@@ -8,6 +8,7 @@ sub-categories rather than products. Leaf categories are the only ones with
 Pagination is not real here — every category, leaf or hub, fits on one page.
 """
 import asyncio
+import random
 import re
 
 from curl_cffi.requests import AsyncSession
@@ -125,6 +126,14 @@ async def _walk(client: AsyncSession, href: str, seen: set[int], depth: int) -> 
     return out
 
 
+def _parse_product_description(html: str) -> str | None:
+    tree = HTMLParser(html)
+    el = tree.css_first(".product-description")
+    if not el:
+        return None
+    return el.text(strip=True) or None
+
+
 async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
     cat = range_def["cat"]
     # Best-effort URL — server accepts any stem for a given cat id, redirecting
@@ -142,4 +151,13 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
         seen_urls.add(u)
         it.pop("_in_stock", None)
         out.append(it)
+    # Fetch individual product pages for descriptions
+    for item in out:
+        if item.get("url"):
+            await asyncio.sleep(random.uniform(1.0, 2.0))
+            try:
+                rp = await client.get(item["url"], timeout=20)
+                item["description"] = _parse_product_description(rp.text)
+            except Exception:
+                item["description"] = None
     return out

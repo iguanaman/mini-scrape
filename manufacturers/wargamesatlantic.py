@@ -43,6 +43,7 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
                 "url": f"{BASE}/products/{p.get('handle')}",
                 "image_url": image_url,
                 "price": price,
+                "description": p.get("body_html") or None,
             })
         if len(products) < 250:
             break

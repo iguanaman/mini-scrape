@@ -48,12 +48,14 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
             break
         for p in products:
             images = p.get("images") or []
+            desc = p.get("short_description") or p.get("description") or None
             out.append({
                 "title": p.get("name"),
                 "sku": p.get("sku") or None,
                 "url": p.get("permalink"),
                 "image_url": images[0].get("src") if images else None,
                 "price": _price(p.get("prices") or {}),
+                "description": desc,
             })
         if len(products) < per_page:
             break

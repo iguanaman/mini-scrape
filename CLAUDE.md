@@ -42,6 +42,20 @@ manufacturers/
   warlord.py            Warlord Games — Shopify at store.warlordgames.com.
   perry.py              Perry Miniatures — WooCommerce HTML, top sub-categories only.
   grippingbeast.py      Gripping Beast — legacy CMS, tree-walks deep category hierarchy.
+scripts/
+  scrape_manufacturers.py  Batch-scrape all manufacturer ranges into the DB. Writes title,
+                           image_url, manufacturer_slug, range_slug, manufacturer_url,
+                           description. Never writes prices (price field is used only as a
+                           £15 filter, not persisted). Runs manufacturers in parallel; per-host
+                           throttling via _ThrottledSession.
+                           Run: uv run python scripts/scrape_manufacturers.py
+  fill_minis.py            Iterates non-hidden products without a category, fetches product
+                           pages for the 3 HTML manufacturers (North Star/Perry/Gripping Beast)
+                           if no description yet, then calls local Llama to infer mini count.
+                           Writes minis (int or NULL) + category ("minis", "book", etc.).
+                           Run scrape_manufacturers.py first to populate descriptions.
+                           --overwrite redoes all non-hidden rows.
+                           Run: uv run python scripts/fill_minis.py [--overwrite]
 docs/                   Deep-dive references (see above).
 static/icons/           Retailer + manufacturer favicons
 templates/index.html    Frontend
@@ -93,9 +107,15 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]
 ```
 Each returned product:
 ```python
-{"title": str, "sku": str | None, "url": str, "image_url": str | None, "price": float | None}
+{"title": str, "sku": str | None, "url": str, "image_url": str | None, "price": float | None,
+ "description": str | None}  # raw HTML or plain text; None for manufacturers that don't expose it at listing level
 ```
 The range_def dict is opaque to the caller — each module reads whatever keys it needs (`man_id` for North Star, `handle` for WA, `path` for GW).
+
+Description sources by manufacturer:
+- WA, Victrix, Warlord, GW (via Goblin): `body_html` from Shopify `products.json`
+- Mantic: `short_description` (falling back to `description`) from WooCommerce store API
+- North Star, Perry, Gripping Beast: individual product page fetch (1-2s delay per product)
 
 ## Endpoints (overview)
 - `GET /search?q=...` — runs all retailers in parallel, filters + groups, 15-min in-memory cache. For SKU queries, takes only the first result per retailer. Upserts all groups with at least one SKU into `products` (title/image/prices); for SKU queries with no retailer-provided SKU, uses the query itself as the SKU. Full pipeline + response shape in `docs/internals.md`.

@@ -45,8 +45,6 @@ def _parse_price(text: str | None) -> float | None:
 def _parse_page(html: str) -> tuple[list[dict], int]:
     tree = HTMLParser(html)
     total_pages = 1
-    h2 = tree.css_first("h2")
-    # Walk all h2s to find the "page X of Y" one
     for h in tree.css("h2"):
         m = _PAGES_RE.search(h.text())
         if m:
@@ -82,6 +80,13 @@ def _parse_page(html: str) -> tuple[list[dict], int]:
     return items, total_pages
 
 
+def _parse_product_description(html: str) -> str | None:
+    tree = HTMLParser(html)
+    # Description lives in classless <p> tags — collect all with >20 chars of text.
+    paras = [p.text(strip=True) for p in tree.css("p") if not p.attributes.get("class") and len(p.text(strip=True)) > 20]
+    return "\n\n".join(paras) or None
+
+
 async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
     man_id = range_def["man_id"]
     url = f"{BASE}/list.php"
@@ -97,4 +102,13 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
         if page >= total_pages:
             break
         page += 1
+    # Fetch individual product pages for descriptions
+    for item in out:
+        if item.get("url"):
+            await asyncio.sleep(random.uniform(1.0, 2.0))
+            try:
+                rp = await client.get(item["url"], timeout=15)
+                item["description"] = _parse_product_description(rp.text)
+            except Exception:
+                item["description"] = None
     return out

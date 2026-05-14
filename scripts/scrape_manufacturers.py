@@ -51,6 +51,8 @@ def _persist(man_slug: str, range_def: dict, products: list[dict]) -> int:
             db.upsert_from_manufacturer(
                 sku, p.get("title"), p.get("image_url"),
                 man_slug, range_slug,
+                url=p.get("url"),
+                description=p.get("description"),
             )
             n += 1
         except Exception:
@@ -127,19 +129,33 @@ async def scrape_manufacturer(module) -> tuple[str, int, int, int]:
 
 
 async def main() -> None:
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--manufacturer", "-m", help="Only scrape this manufacturer slug (e.g. gamesworkshop)")
+    args = parser.parse_args()
+
     db.init()
-    log.info("scraping %d manufacturers", len(MANUFACTURERS))
+    targets = MANUFACTURERS
+    if args.manufacturer:
+        targets = [m for m in MANUFACTURERS if m.SLUG == args.manufacturer]
+        if not targets:
+            slugs = ", ".join(m.SLUG for m in MANUFACTURERS)
+            log.error("unknown manufacturer %r. Available: %s", args.manufacturer, slugs)
+            return
+
+    log.info("scraping %d manufacturers", len(targets))
     t0 = time.monotonic()
-    results = await asyncio.gather(*(scrape_manufacturer(m) for m in MANUFACTURERS))
+    results = await asyncio.gather(*(scrape_manufacturer(m) for m in targets))
     elapsed = time.monotonic() - t0
     log.info("done in %.1fs", elapsed)
     log.info("%-20s %6s %6s %10s", "manufacturer", "ok", "fail", "products")
     for slug, ok, fail, total in results:
         log.info("%-20s %6d %6d %10d", slug, ok, fail, total)
-    log.info("%-20s %6d %6d %10d", "TOTAL",
-             sum(r[1] for r in results),
-             sum(r[2] for r in results),
-             sum(r[3] for r in results))
+    if len(results) > 1:
+        log.info("%-20s %6d %6d %10d", "TOTAL",
+                 sum(r[1] for r in results),
+                 sum(r[2] for r in results),
+                 sum(r[3] for r in results))
 
 
 if __name__ == "__main__":

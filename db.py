@@ -16,8 +16,11 @@ CREATE TABLE IF NOT EXISTS products (
     image_url TEXT,
     manufacturer_slug TEXT,
     range_slug TEXT,
+    manufacturer_url TEXT,
     prices_json TEXT,
+    description TEXT,
     minis INTEGER,
+    category TEXT,
     wishlisted_at TEXT,
     hidden INTEGER NOT NULL DEFAULT 0,
     owned INTEGER NOT NULL DEFAULT 0,
@@ -56,6 +59,9 @@ def init() -> None:
         for stmt in (
             "ALTER TABLE products ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE products ADD COLUMN owned INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE products ADD COLUMN manufacturer_url TEXT",
+            "ALTER TABLE products ADD COLUMN description TEXT",
+            "ALTER TABLE products ADD COLUMN category TEXT",
         ):
             try:
                 c.execute(stmt)
@@ -123,7 +129,9 @@ def upsert_range(slug: str, manufacturer_slug: str, name: str, group: str | None
 
 
 def upsert_from_manufacturer(sku: str, title: str | None, image_url: str | None,
-                             manufacturer_slug: str, range_slug: str | None) -> None:
+                             manufacturer_slug: str, range_slug: str | None,
+                             url: str | None = None,
+                             description: str | None = None) -> None:
     key = _norm_sku(sku)
     if not key:
         return
@@ -131,15 +139,40 @@ def upsert_from_manufacturer(sku: str, title: str | None, image_url: str | None,
     with _conn() as c:
         c.execute(
             """INSERT INTO products (sku, title, image_url, manufacturer_slug,
-                                     range_slug, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?)
+                                     range_slug, manufacturer_url, description, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(sku) DO UPDATE SET
                  title = COALESCE(excluded.title, products.title),
                  image_url = COALESCE(excluded.image_url, products.image_url),
                  manufacturer_slug = excluded.manufacturer_slug,
                  range_slug = excluded.range_slug,
+                 manufacturer_url = COALESCE(excluded.manufacturer_url, products.manufacturer_url),
+                 description = COALESCE(excluded.description, products.description),
                  updated_at = excluded.updated_at""",
-            (key, title, image_url, manufacturer_slug, range_slug, now),
+            (key, title, image_url, manufacturer_slug, range_slug, url, description, now),
+        )
+
+
+def set_minis(sku: str, count: int | None, category: str) -> None:
+    key = _norm_sku(sku)
+    if not key:
+        return
+    with _conn() as c:
+        c.execute(
+            """UPDATE products SET minis = ?, category = ?, updated_at = ?
+               WHERE sku = ?""",
+            (count, category, _now(), key),
+        )
+
+
+def set_description(sku: str, description: str) -> None:
+    key = _norm_sku(sku)
+    if not key:
+        return
+    with _conn() as c:
+        c.execute(
+            "UPDATE products SET description = ?, updated_at = ? WHERE sku = ?",
+            (description, _now(), key),
         )
 
 

@@ -1,3 +1,5 @@
+import asyncio
+import random
 import re
 
 from curl_cffi.requests import AsyncSession
@@ -80,6 +82,14 @@ def _parse_page(html: str) -> tuple[list[dict], bool]:
     return items, has_next
 
 
+def _parse_product_description(html: str) -> str | None:
+    tree = HTMLParser(html)
+    el = tree.css_first("#tab-description")
+    if not el:
+        return None
+    return el.text(strip=True) or None
+
+
 async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
     path = range_def["path"]
     out: list[dict] = []
@@ -98,4 +108,13 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
         if not has_next:
             break
         page += 1
+    # Fetch individual product pages for descriptions
+    for item in out:
+        if item.get("url"):
+            await asyncio.sleep(random.uniform(1.0, 2.0))
+            try:
+                rp = await client.get(item["url"], timeout=20)
+                item["description"] = _parse_product_description(rp.text)
+            except Exception:
+                item["description"] = None
     return out

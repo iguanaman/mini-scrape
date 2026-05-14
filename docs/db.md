@@ -12,9 +12,12 @@ CREATE TABLE products (
     title TEXT,
     image_url TEXT,
     manufacturer_slug TEXT,          -- set when seen via /manufacturer/...
-    manufacturer_price REAL,
+    range_slug TEXT,
+    manufacturer_url TEXT,           -- product URL on the manufacturer's own site
     prices_json TEXT,                -- JSON: {retailer_slug: {price, url}}
-    minis INTEGER,                   -- count of miniatures in the box; manual, default NULL
+    description TEXT,                -- raw HTML or plain text from manufacturer/retailer
+    minis INTEGER,                   -- Llama-inferred count of miniatures in the box; NULL = not yet checked
+    category TEXT,                   -- always set when checked: "minis" (with or without count), "book", "paint", etc.
     wishlisted_at TEXT,              -- ISO-8601 UTC; NULL = not on wishlist
     hidden INTEGER NOT NULL DEFAULT 0, -- 1 = hidden from search/range results
     owned INTEGER NOT NULL DEFAULT 0,  -- user-tracked count of units owned
@@ -22,7 +25,7 @@ CREATE TABLE products (
 );
 ```
 
-`hidden` and `owned` were added via migration — older DBs get them automatically on first startup after the update.
+`hidden`, `owned`, `manufacturer_url`, `description`, and `minis_label` were added via migration — older DBs get them automatically on first startup.
 
 No separate wishlist or hidden-SKU table — flags live on the products row.
 
@@ -43,7 +46,7 @@ New table, created via `_SCHEMA` (idempotent). No migration needed for existing 
 ## Write paths
 
 1. **`/search` → `_persist_search_groups`** (app.py): after grouping, for each group with at least one SKU, build a per-store dict like `{"goblin": {"price": 24.50, "url": "..."}, "wayland": {"price": null, "url": "..."}}` (price=null when out of stock; store omitted if retailer didn't return that SKU). Calls `db.upsert_from_retailer(sku, title, image, prices)` for each sku in the group — overwrites `prices_json` entirely on every search. For SKU queries where retailers didn't echo back a SKU, the query string itself is used as the authoritative SKU.
-2. **`/manufacturer/{slug}/{range}` → `_persist_manufacturer_products`**: for each product with a SKU, calls `db.upsert_from_manufacturer(sku, title, image, mfr_slug, price)`. Sets/overwrites `manufacturer_slug` and `manufacturer_price`. Does not touch `prices_json`.
+2. **`scrape_manufacturers.py`** (and live `/manufacturer/{slug}/{range}` endpoint): for each product with a SKU, calls `db.upsert_from_manufacturer(sku, title, image, mfr_slug, range_slug, url, description)`. Sets `manufacturer_slug`, `range_slug`, `manufacturer_url`, `description`. Never writes `prices_json`, `wishlisted_at`, `hidden`, `owned`. The `price` field returned by manufacturer modules is used only as a £15 filter — not persisted.
 3. **`POST /api/wishlist/{sku}`**: inserts the row if missing, or sets `wishlisted_at = now` only if currently NULL (idempotent re-adds don't bump the timestamp). Uses `COALESCE(products.wishlisted_at, excluded.wishlisted_at)` in the ON CONFLICT branch.
 4. **`DELETE /api/wishlist/{sku}`**: `UPDATE products SET wishlisted_at = NULL` — row stays in cache.
 5. **`POST /api/hide/{sku}`**: upserts with `hidden = 1`. If the SKU has never been seen via search, this creates a skeleton row (sku + hidden + updated_at only) so the flag persists even before any price data.
@@ -81,4 +84,5 @@ All upserts use `COALESCE` for `title` to avoid blanking existing values. For `i
 - No FTS, no indexes beyond the PK — single user, table will stay small.
 - Additive columns (like `hidden`) are added via ALTER TABLE migration on startup — no need to delete the DB.
 - Destructive schema changes (rename/remove columns, change types) still require deleting `main.db`.
-- `minis` is a manual integer column with no UI yet — populate via direct sqlite or a future admin endpoint.
+- `minis` / `category` are populated by `scripts/fill_minis.py`, which iterates products with a description and calls the local Llama instance. `category` is always set: `"minis"` for mini boxes (with or without a count), or a product type (`"book"`, `"paint"`, etc.). Run with `--overwrite` to reprocess already-filled rows.
+- `manufacturer_url` comes from the manufacturer scrapers (5 via API body, 3 via individual product page fetches with 1-2s delays).
