@@ -449,7 +449,7 @@
           if (rank(a) === 0) return (a.price ?? Infinity) - (b.price ?? Infinity);
           return 0;
         });
-        offersHtml = `<div class="offers-section hidden flex flex-col gap-0.5 mt-1 border-t pt-1">
+        offersHtml = `<div class="offers-section hidden flex-col gap-0.5 mt-1 border-t pt-1" style="display:none">
           ${offers.map(o => offerRow(o, false)).join('')}
         </div>`;
       }
@@ -514,9 +514,11 @@
               const allCards = rangeContainer
                 ? rangeContainer.querySelectorAll('.card-wrap[data-has-prices="1"]')
                 : [cardEl];
-              const opening = cardEl.querySelector('.offers-section')?.classList.contains('hidden');
+              const sec = cardEl.querySelector('.offers-section');
+              const opening = sec ? sec.style.display === 'none' : true;
               allCards.forEach(c => {
-                c.querySelector('.offers-section')?.classList.toggle('hidden', !opening);
+                const s = c.querySelector('.offers-section');
+                if (s) s.style.display = opening ? 'flex' : 'none';
               });
               return;
             }
