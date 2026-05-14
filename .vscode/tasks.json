@@ -4,9 +4,12 @@
     {
       "label": "Run dev server",
       "type": "shell",
-      "command": "uv run uvicorn app:app --reload",
+      "command": "uv run uvicorn app:app 2>&1 | tee server.txt",
       "options": {
-        "cwd": "${workspaceFolder}"
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONUNBUFFERED": "1"
+        }
       },
       "isBackground": true,
       "problemMatcher": [],
@@ -18,6 +21,20 @@
         "kind": "build",
         "isDefault": true
       }
+    }
+  ,
+    {
+      "label": "Scrape manufacturers",
+      "type": "shell",
+      "command": "uv run python scripts/scrape_manufacturers.py",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
     }
   ]
 }

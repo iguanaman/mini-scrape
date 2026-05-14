@@ -1,0 +1,145 @@
+"""Scrape every range of every manufacturer into the sqlite product cache.
+
+Manufacturers run in parallel; ranges within a manufacturer run sequentially
+with a 1-2s random gap between requests (looks human, polite per-host).
+
+Same filter as the homepage: price >= £15, sorted by SKU before upsert.
+
+Run with:  uv run python scripts/scrape_manufacturers.py
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import random
+import sys
+import time
+from pathlib import Path
+
+# Make project root importable when run as `python scripts/scrape_manufacturers.py`.
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from curl_cffi.requests import AsyncSession
+
+import db
+from manufacturers import MANUFACTURERS
+from retailers import IMPERSONATE
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+log = logging.getLogger("scrape")
+
+MIN_DELAY = 0.5
+MAX_DELAY = 1.5
+PRICE_FLOOR = 15
+TIMEOUT = 60
+RETRY_DELAY_MIN = 2.0
+RETRY_DELAY_MAX = 4.0
+
+
+def _persist(man_slug: str, range_def: dict, products: list[dict]) -> int:
+    range_slug = range_def["slug"]
+    range_name = range_def.get("name")
+    range_group = range_def.get("group")
+    n = 0
+    for p in products:
+        sku = p.get("sku")
+        if not sku:
+            continue
+        try:
+            db.upsert_from_manufacturer(
+                sku, p.get("title"), p.get("image_url"), p.get("url"),
+                man_slug, range_slug, range_name, range_group, p.get("price")
+            )
+            n += 1
+        except Exception:
+            log.exception("upsert failed for %s sku=%s", man_slug, sku)
+    return n
+
+
+class _ThrottledSession:
+    """Wraps an AsyncSession so every HTTP call waits MIN_DELAY..MAX_DELAY first.
+
+    Applies to .get/.post/.put/.delete/.head/.patch/.request — anything the
+    manufacturer modules might call. Skips the wait on the very first call so
+    range-level pacing in scrape_manufacturer() stays in control of inter-range
+    timing.
+    """
+    _METHODS = ("get", "post", "put", "delete", "head", "patch", "request", "options")
+
+    def __init__(self, inner):
+        self._inner = inner
+        self._first = True
+
+    def __getattr__(self, name):
+        target = getattr(self._inner, name)
+        if name not in self._METHODS:
+            return target
+
+        async def wrapped(*args, **kwargs):
+            if self._first:
+                self._first = False
+            else:
+                await asyncio.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
+            # Override any per-call timeout the manufacturer module set —
+            # this is a batch script and we want the longer TIMEOUT we chose.
+            kwargs["timeout"] = TIMEOUT
+            return await target(*args, **kwargs)
+        return wrapped
+
+
+async def scrape_manufacturer(module) -> tuple[str, int, int, int]:
+    """Returns (slug, ranges_ok, ranges_failed, products_upserted)."""
+    ok = fail = total = 0
+    async with AsyncSession(impersonate=IMPERSONATE, timeout=TIMEOUT) as raw:
+        client = _ThrottledSession(raw)
+        for range_def in module.RANGES:
+            label = f"{module.SLUG}/{range_def['slug']}"
+            t0 = time.monotonic()
+            products = None
+            for attempt in (1, 2):
+                try:
+                    products = await module.fetch_range(range_def, client)
+                    break
+                except Exception as exc:
+                    if attempt == 1:
+                        log.info("retry %s after %s: %s", label, type(exc).__name__, exc)
+                        await asyncio.sleep(random.uniform(RETRY_DELAY_MIN, RETRY_DELAY_MAX))
+                        continue
+                    fail += 1
+                    log.warning("FAIL %s: %s: %s", label, type(exc).__name__, exc)
+            if products is None:
+                continue
+            products = [
+                p for p in products
+                if isinstance(p.get("price"), (int, float)) and p["price"] >= PRICE_FLOOR
+            ]
+            products.sort(key=lambda p: (p.get("sku") or "￿").upper())
+            n = _persist(module.SLUG, range_def, products)
+            ok += 1
+            total += n
+            log.info("ok   %-45s %4d products  %.1fs", label, n, time.monotonic() - t0)
+    return (module.SLUG, ok, fail, total)
+
+
+async def main() -> None:
+    db.init()
+    log.info("scraping %d manufacturers", len(MANUFACTURERS))
+    t0 = time.monotonic()
+    results = await asyncio.gather(*(scrape_manufacturer(m) for m in MANUFACTURERS))
+    elapsed = time.monotonic() - t0
+    log.info("done in %.1fs", elapsed)
+    log.info("%-20s %6s %6s %10s", "manufacturer", "ok", "fail", "products")
+    for slug, ok, fail, total in results:
+        log.info("%-20s %6d %6d %10d", slug, ok, fail, total)
+    log.info("%-20s %6d %6d %10d", "TOTAL",
+             sum(r[1] for r in results),
+             sum(r[2] for r in results),
+             sum(r[3] for r in results))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
