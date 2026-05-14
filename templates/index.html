@@ -843,13 +843,16 @@
           btn.addEventListener('click', () => {
             const man = btn.dataset.man, range = btn.dataset.range;
             const section = btn.closest('section');
+            let opening = false;
             section.querySelectorAll('.range-products').forEach(c => {
               if (c.dataset.man === man && c.dataset.range === range) {
+                opening = c.hidden;
                 c.hidden = !c.hidden;
                 if (!c.hidden && !c.dataset.loaded) {
                   c.dataset.loaded = '1';
                   loadRange(man, range, c);
                 }
+                if (!c.hidden) setTimeout(() => c.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
               } else {
                 c.hidden = true;
               }
