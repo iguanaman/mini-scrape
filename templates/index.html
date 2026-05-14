@@ -22,6 +22,24 @@
       );
     }
     .card-wrap:hover .hide-btn { opacity: 1; }
+    .card-wrap:hover .heart-btn { opacity: 1; }
+    @keyframes shimmer {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .price-loading {
+      pointer-events: none;
+      position: relative;
+      overflow: hidden;
+    }
+    .price-loading::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.45) 50%, transparent 100%);
+      animation: shimmer 1.4s ease-in-out infinite;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-900">
@@ -58,9 +76,26 @@
   </aside>
 
   <main class="max-w-7xl mx-auto px-6 pt-2 pb-6 flex flex-col gap-4">
+    <div id="wayland-banner" class="hidden text-sm bg-amber-50 border border-amber-300 rounded-lg p-3 flex flex-col gap-2">
+      <div class="flex items-start justify-between gap-2">
+        <div>
+          <strong>Wayland Games is blocking requests.</strong>
+          Drag this bookmarklet to your bookmarks bar, then visit
+          <a href="https://www.waylandgames.co.uk" target="_blank" rel="noopener" class="underline">waylandgames.co.uk</a>,
+          browse around until the site loads normally, then click the bookmarklet.
+        </div>
+        <button type="button" id="wayland-banner-close" class="shrink-0 text-gray-500 hover:text-black text-lg leading-none">×</button>
+      </div>
+      <div class="flex items-center gap-3">
+        <a id="wayland-bookmarklet" href="" class="inline-block bg-amber-200 hover:bg-amber-300 border border-amber-400 rounded px-3 py-1 font-medium cursor-grab select-none">
+          📋 Send cookies to mini-scrape
+        </a>
+        <span id="wayland-cookie-status" class="text-green-700 hidden">✓ Cookies saved — search again to retry Wayland.</span>
+      </div>
+    </div>
     <div id="errors" class="text-sm text-red-700 empty:hidden"></div>
     <div id="manufacturers" class="flex flex-col gap-6 empty:hidden"></div>
-    <div id="grid" class="flex flex-wrap justify-center gap-4 empty:hidden"></div>
+    <div id="grid" class="grid grid-cols-4 gap-2 empty:hidden"></div>
   </main>
 
   <script>
@@ -74,6 +109,7 @@
     let selectedStore = null;
     let lastGroups = [];
     let lastRetailers = [];
+    let searchDone = false;
     let cardsExpanded = false;
     let wishlistSet = new Set();
 
@@ -118,6 +154,7 @@
         if (inList) wishlistSet.delete(key); else wishlistSet.add(key);
         btn.dataset.filled = inList ? '0' : '1';
         btn.innerHTML = heartSvg(!inList);
+        btn.classList.toggle('opacity-0', inList);
       } catch (_) {}
     }
 
@@ -144,6 +181,70 @@
 
     const fmt = (n) => (typeof n === 'number') ? '£' + n.toFixed(2) : '';
     const esc = (s) => (s ?? '').toString().replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+    const _priceQueue = [];
+    let _priceQueueRunning = false;
+
+    function updateSticker(cardEl, cheapestPrice) {
+      const existing = cardEl.querySelector('.sticker');
+      const inner = cheapestPrice !== null
+        ? `<div class="font-extrabold text-sm leading-none">${fmt(cheapestPrice)}</div>`
+        : `<div class="font-bold text-xs leading-tight text-center">No stock</div>`;
+      const bg = cheapestPrice !== null
+        ? 'background: radial-gradient(circle at 30% 25%, #f0fdf4 0%, #dcfce7 70%, #86efac 100%)'
+        : '';
+      const html = `<div class="sticker absolute bottom-8 right-3 w-16 h-16 flex flex-col items-center justify-center text-stone-900" style="${bg}">${inner}</div>`;
+      if (existing) {
+        existing.outerHTML = html;
+      } else {
+        cardEl.querySelector('[style*="height:240px"]').insertAdjacentHTML('beforeend', html);
+      }
+    }
+
+    async function _drainPriceQueue() {
+      if (_priceQueueRunning) return;
+      _priceQueueRunning = true;
+      while (_priceQueue.length) {
+        const { cardEl, sku } = _priceQueue.shift();
+        // Card may have been removed from DOM between queueing and now
+        if (!document.contains(cardEl)) continue;
+        try {
+          const r = await fetch('/search?q=' + encodeURIComponent(sku));
+          const data = await r.json();
+          const groups = data.groups || [];
+          let cheapest = null;
+          for (const g of groups) {
+            for (const o of (g.offers || [])) {
+              if (o.in_stock && typeof o.price === 'number') {
+                if (cheapest === null || o.price < cheapest) cheapest = o.price;
+              }
+            }
+          }
+          if (cheapest === null) {
+            await fetch('/api/hide/' + encodeURIComponent(sku), { method: 'POST' });
+            const hideBtn = cardEl.querySelector('.hide-btn');
+            if (hideBtn) { hideBtn.dataset.hidden = '1'; hideBtn.innerHTML = eyeSvg(true); hideBtn.title = 'Unhide this product'; }
+            cardEl.classList.add('opacity-40', 'grayscale');
+          } else {
+            updateSticker(cardEl, cheapest);
+          }
+          cardEl.dataset.priceState = 'loaded';
+        } catch (_) {
+          cardEl.dataset.priceState = 'idle';
+        } finally {
+          cardEl.classList.remove('price-loading');
+        }
+        if (_priceQueue.length) await new Promise(res => setTimeout(res, 1500));
+      }
+      _priceQueueRunning = false;
+    }
+
+    function enqueueCardPriceFetch(cardEl, sku) {
+      cardEl.dataset.priceState = 'loading';
+      cardEl.classList.add('price-loading');
+      _priceQueue.push({ cardEl, sku });
+      _drainPriceQueue();
+    }
 
     function offerRow(o, dim) {
       // o has retailer name + icon + slug always; price/url/in_stock may be missing.
@@ -252,24 +353,25 @@
       const firstSku = (g.skus && g.skus[0]) || null;
       const heartFilled = firstSku ? wishlistSet.has(normSku(firstSku)) : false;
       const heartBtn = firstSku ? `
-        <button type="button" class="heart-btn absolute top-2 left-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-red-600 hover:bg-white shadow"
+        <button type="button" class="heart-btn absolute top-2 left-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-red-600 hover:bg-white shadow transition-opacity duration-500 ${heartFilled ? '' : 'opacity-0'}"
           data-sku="${esc(firstSku)}" data-filled="${heartFilled ? '1' : '0'}"
           title="${heartFilled ? 'Remove from wishlist' : 'Add to wishlist'}">
           ${heartSvg(heartFilled)}
         </button>` : '';
       const hideBtn = firstSku ? `
-        <button type="button" class="hide-btn absolute top-2 right-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-gray-600 hover:bg-white shadow opacity-0 transition-opacity"
+        <button type="button" class="hide-btn absolute top-2 right-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-gray-600 hover:bg-white shadow opacity-0 transition-opacity duration-500"
           data-sku="${esc(firstSku)}" data-hidden="0"
           title="Hide this product">
           ${eyeSvg(false)}
         </button>` : '';
       return `
-        <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col w-72 ${cardDimmed ? 'opacity-40 grayscale' : ''}">
+        <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col ${cardDimmed ? 'opacity-40 grayscale' : ''}">
           <div class="relative" style="height:240px">
             ${imgWrap}
             ${heartBtn}
             ${hideBtn}
             <div class="sticker absolute bottom-8 right-3 w-16 h-16 flex flex-col items-center justify-center text-stone-900"
+                 style="${hasStock ? 'background: radial-gradient(circle at 30% 25%, #f0fdf4 0%, #dcfce7 70%, #86efac 100%)' : ''}"
                  title="${esc(g.cheapest_retailer || '')}">
               ${stickerInner}
             </div>
@@ -285,7 +387,6 @@
 
     function productCard(p) {
       const sku = (p.sku || '').trim();
-      const click = sku ? `onclick="openSearch(${JSON.stringify(sku).replace(/"/g, '&quot;')})"` : '';
       const imgInner = p.image_url
         ? `<img src="${esc(p.image_url)}" class="w-full h-full object-contain" alt="${esc(p.title)}" />`
         : `<div class="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">no image</div>`;
@@ -293,8 +394,9 @@
         .map(e => e && typeof e === 'object' ? e.price : e)
         .filter(v => typeof v === 'number');
       const cheapestRetailer = retailerPrices.length ? Math.min(...retailerPrices) : null;
-      const displayPrice = cheapestRetailer ?? (typeof p.price === 'number' ? p.price : null);
+      const displayPrice = cheapestRetailer;
       const livePrice = cheapestRetailer !== null;
+      const priceState = livePrice ? 'loaded' : (sku ? 'idle' : 'loaded');
       const stickerBg = livePrice
         ? 'background: radial-gradient(circle at 30% 25%, #f0fdf4 0%, #dcfce7 70%, #86efac 100%)'
         : '';
@@ -305,19 +407,21 @@
            </div>` : '';
       const heartFilled = sku ? wishlistSet.has(normSku(sku)) : false;
       const heartBtn = sku ? `
-        <button type="button" class="heart-btn absolute top-2 left-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-red-600 hover:bg-white shadow"
+        <button type="button" class="heart-btn absolute top-2 left-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-red-600 hover:bg-white shadow transition-opacity duration-500 ${heartFilled ? '' : 'opacity-0'}"
           data-sku="${esc(sku)}" data-filled="${heartFilled ? '1' : '0'}"
           title="${heartFilled ? 'Remove from wishlist' : 'Add to wishlist'}">
           ${heartSvg(heartFilled)}
         </button>` : '';
       const hideBtn = sku ? `
-        <button type="button" class="hide-btn absolute top-2 right-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-gray-600 hover:bg-white shadow opacity-0 transition-opacity"
+        <button type="button" class="hide-btn absolute top-2 right-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-gray-600 hover:bg-white shadow opacity-0 transition-opacity duration-500"
           data-sku="${esc(sku)}" data-hidden="0"
           title="Hide this product">
           ${eyeSvg(false)}
         </button>` : '';
+      const clickable = sku ? 'cursor-pointer hover:shadow-md transition-shadow' : '';
       return `
-        <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col w-72 cursor-pointer hover:shadow-md transition-shadow" ${click}>
+        <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col ${clickable}"
+             data-price-state="${priceState}" data-sku="${esc(sku)}">
           <div class="relative" style="height:240px">
             ${imgInner}
             ${heartBtn}
@@ -345,7 +449,7 @@
           container.innerHTML = `<div class="text-sm text-gray-500 px-2">No products.</div>`;
           return;
         }
-        container.innerHTML = `<div class="flex flex-wrap justify-center gap-4">${products.map(productCard).join('')}</div>`;
+        container.innerHTML = `<div class="grid grid-cols-4 gap-2 p-4 pt-0">${products.map(productCard).join('')}</div>`;
         container.querySelectorAll('.heart-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -359,6 +463,17 @@
             e.preventDefault();
             const card = btn.closest('.card-wrap');
             toggleHide(btn.dataset.sku, btn, card);
+          });
+        });
+        container.querySelectorAll('.card-wrap').forEach(cardEl => {
+          cardEl.addEventListener('click', (e) => {
+            if (e.target.closest('.heart-btn, .hide-btn')) return;
+            const sku = cardEl.dataset.sku;
+            if (!sku) return;
+            const state = cardEl.dataset.priceState;
+            if (state === 'loading') return;
+            if (state === 'loaded') { openSearch(sku); return; }
+            enqueueCardPriceFetch(cardEl, sku);
           });
         });
       } catch (err) {
@@ -439,12 +554,16 @@
         const r = await fetch('/manufacturers');
         const data = await r.json();
         const mans = data.manufacturers || [];
-        const pill = (manSlug, r) => `<span class="range-pill inline-flex items-center border rounded-full text-sm overflow-hidden">
+        const pill = (manSlug, r) => `<span class="range-pill inline-flex items-center border rounded-full text-sm overflow-hidden${r.hidden ? ' opacity-50' : ''}" data-hidden="${r.hidden ? '1' : '0'}">
           <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}"
             class="range-btn px-3 py-1 hover:bg-gray-100">${esc(r.name)}</button>
-          <button type="button" data-q="${esc(r.name)}" title="Search retailers for ${esc(r.name)}"
-            class="range-search px-2 py-1 border-l hover:bg-gray-100 text-gray-500 hover:text-gray-800" aria-label="Search">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}" title="Fetch prices for ${esc(r.name)}"
+            class="range-queue px-2 py-1 border-l hover:bg-gray-100 text-gray-500 hover:text-gray-800" aria-label="Fetch prices">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0-3-3m3 3 3-3M3 17V7a2 2 0 0 1 2-2h6l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          </button>
+          <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}" title="Hide range"
+            class="range-hide px-2 py-1 border-l hover:bg-gray-100 ${r.hidden ? 'text-gray-800' : 'text-gray-400'} hover:text-gray-800" aria-label="Hide range">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
           </button>
         </span>`;
         const renderRanges = (m) => {
@@ -465,20 +584,53 @@
           </div>`).join('');
         };
         manufacturers.innerHTML = mans.map(m => `
-          <section class="border rounded-lg bg-white p-4">
-            <div class="flex items-center gap-2 mb-3">
-              <img src="${esc(m.icon)}" class="w-5 h-5 object-contain" alt="" />
-              <h2 class="font-semibold">${esc(m.name)}</h2>
+          <section class="border rounded-lg bg-white overflow-hidden">
+            <div class="p-4">
+              <div class="flex items-center gap-2 mb-3">
+                <img src="${esc(m.icon)}" class="w-5 h-5 object-contain" alt="" />
+                <h2 class="font-semibold">${esc(m.name)}</h2>
+              </div>
+              ${renderRanges(m)}
             </div>
-            ${renderRanges(m)}
             ${m.ranges.map(r => `<div class="range-products mt-2" data-man="${esc(m.slug)}" data-range="${esc(r.slug)}" hidden></div>`).join('')}
           </section>
         `).join('');
 
-        manufacturers.querySelectorAll('.range-search').forEach(btn => {
-          btn.addEventListener('click', (e) => {
+        manufacturers.querySelectorAll('.range-queue').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
             e.stopPropagation();
-            openSearch(btn.dataset.q);
+            const man = btn.dataset.man, range = btn.dataset.range;
+            const section = btn.closest('section');
+            const container = section.querySelector(`.range-products[data-man="${man}"][data-range="${range}"]`);
+            if (!container) return;
+            if (!container.dataset.loaded) {
+              container.dataset.loaded = '1';
+              container.hidden = false;
+              section.querySelectorAll('.range-btn').forEach(b => {
+                b.classList.toggle('bg-gray-100', b.dataset.man === man && b.dataset.range === range);
+              });
+              await loadRange(man, range, container);
+            }
+            container.querySelectorAll('.card-wrap[data-price-state="idle"]').forEach(cardEl => {
+              const sku = cardEl.dataset.sku;
+              if (sku) enqueueCardPriceFetch(cardEl, sku);
+            });
+          });
+        });
+
+        manufacturers.querySelectorAll('.range-hide').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const man = btn.dataset.man, range = btn.dataset.range;
+            const pill = btn.closest('.range-pill');
+            const isHidden = pill.dataset.hidden === '1';
+            const method = isHidden ? 'DELETE' : 'POST';
+            await fetch(`/api/hide-range/${encodeURIComponent(man)}/${encodeURIComponent(range)}`, { method });
+            const nowHidden = !isHidden;
+            pill.dataset.hidden = nowHidden ? '1' : '0';
+            pill.classList.toggle('opacity-50', nowHidden);
+            btn.classList.toggle('text-gray-800', nowHidden);
+            btn.classList.toggle('text-gray-400', !nowHidden);
           });
         });
 
@@ -535,7 +687,9 @@
         const bOk = groupHasStock(b) ? 0 : 1;
         return aOk - bOk;
       });
-      grid.innerHTML = sorted.map(g => card(g, lastRetailers)).join('');
+      grid.innerHTML = sorted.length
+        ? sorted.map(g => card(g, lastRetailers)).join('')
+        : (searchDone && !lastGroups.length ? '<div class="col-span-4 text-sm text-gray-500 px-2">No results found.</div>' : '');
       grid.querySelectorAll('.expand-toggle').forEach(btn => {
         btn.addEventListener('click', () => {
           cardsExpanded = !cardsExpanded;
@@ -563,13 +717,20 @@
       manufacturers.innerHTML = '';
       grid.innerHTML = '';
       errors.textContent = '';
+      searchDone = false;
       try {
         const r = await fetch('/search?q=' + encodeURIComponent(q));
         const data = await r.json();
         lastGroups = data.groups || [];
         lastRetailers = data.retailers || [];
+        searchDone = true;
         renderStoreFilters();
         renderGrid();
+        if (data.wayland_blocked) {
+          window._showWaylandBanner();
+        } else {
+          window._hideWaylandBanner();
+        }
         const errEntries = Object.entries(data.errors || {});
         if (errEntries.length) {
           errors.innerHTML = '<strong>Errors:</strong> ' + errEntries.map(([k,v]) => `${esc(k)}: ${esc(v)}`).join(' · ');
@@ -577,6 +738,35 @@
       } catch (err) {
         errors.textContent = 'Request failed: ' + err;
       }
+    }
+
+    // Wayland cookie banner
+    {
+      const banner = document.getElementById('wayland-banner');
+      const status = document.getElementById('wayland-cookie-status');
+      const bookmarklet = document.getElementById('wayland-bookmarklet');
+
+      const bmCode = `javascript:(function(){
+        var c=document.cookie;
+        if(!c){alert('No cookies found — try browsing the site first.');return;}
+        fetch('http://localhost:8000/api/wayland-cookies',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({cookies:c})})
+          .then(function(r){return r.json();})
+          .then(function(d){alert(d.ok?'Cookies sent to mini-scrape!':'Failed: '+(d.error||'unknown'));})
+          .catch(function(e){alert('Error: '+e);});
+      })();`;
+      bookmarklet.href = bmCode.replace(/\s+/g, ' ');
+
+      document.getElementById('wayland-banner-close').addEventListener('click', () => {
+        banner.classList.add('hidden');
+      });
+
+      window._showWaylandBanner = () => {
+        status.classList.add('hidden');
+        banner.classList.remove('hidden');
+      };
+      window._hideWaylandBanner = () => {
+        banner.classList.add('hidden');
+      };
     }
 
     f.addEventListener('submit', (e) => {
