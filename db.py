@@ -54,6 +54,7 @@ def init() -> None:
         # Idempotent migrations
         for stmt in (
             "ALTER TABLE products ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE products ADD COLUMN owned INTEGER NOT NULL DEFAULT 0",
         ):
             try:
                 c.execute(stmt)
@@ -180,6 +181,31 @@ def unhide_product(sku: str) -> None:
         return
     with _conn() as c:
         c.execute("UPDATE products SET hidden = 0 WHERE sku = ?", (key,))
+
+
+def set_owned(sku: str, count: int) -> int:
+    key = _norm_sku(sku)
+    if not key:
+        return 0
+    count = max(0, count)
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO products (sku, owned, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(sku) DO UPDATE SET
+                 owned = excluded.owned,
+                 updated_at = excluded.updated_at""",
+            (key, count, _now()),
+        )
+    return count
+
+
+def owned_counts() -> dict[str, int]:
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT sku, owned FROM products WHERE owned > 0"
+        ).fetchall()
+    return {r["sku"]: r["owned"] for r in rows}
 
 
 def hide_range(man_slug: str, range_slug: str) -> None:
