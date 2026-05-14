@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT))
 from curl_cffi.requests import AsyncSession
 
 import db
-from manufacturers import MANUFACTURERS
+from manufacturers import MANUFACTURERS, PRICE_FLOOR
 from retailers import IMPERSONATE
 
 logging.basicConfig(
@@ -34,7 +34,6 @@ log = logging.getLogger("scrape")
 
 MIN_DELAY = 0.5
 MAX_DELAY = 1.5
-PRICE_FLOOR = 15
 TIMEOUT = 60
 RETRY_DELAY_MIN = 2.0
 RETRY_DELAY_MAX = 4.0
@@ -54,6 +53,8 @@ def _persist(man_slug: str, range_def: dict, products: list[dict]) -> int:
                 url=p.get("url"),
                 description=p.get("description"),
             )
+            if "minis" in p or "category" in p:
+                db.set_minis(sku, p.get("minis"), p.get("category") or "minis")
             n += 1
         except Exception:
             log.exception("upsert failed for %s sku=%s", man_slug, sku)
@@ -101,6 +102,7 @@ async def scrape_manufacturer(module) -> tuple[str, int, int, int]:
         client = _ThrottledSession(raw)
         for range_def in module.RANGES:
             label = f"{module.SLUG}/{range_def['slug']}"
+            log.info("start %s", label)
             t0 = time.monotonic()
             products = None
             for attempt in (1, 2):

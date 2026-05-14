@@ -83,32 +83,50 @@ def _parse_page(html: str) -> tuple[list[dict], int]:
 def _parse_product_description(html: str) -> str | None:
     tree = HTMLParser(html)
     # Description lives in classless <p> tags — collect all with >20 chars of text.
-    paras = [p.text(strip=True) for p in tree.css("p") if not p.attributes.get("class") and len(p.text(strip=True)) > 20]
+    paras = []
+    for p in tree.css("p"):
+        if p.attributes.get("class"):
+            continue
+        txt = re.sub(r"\s+", " ", p.text(separator=" ")).strip()
+        if len(txt) > 20:
+            paras.append(txt)
     return "\n\n".join(paras) or None
 
 
 async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
+    import sys
+    import db as _db
     man_id = range_def["man_id"]
     url = f"{BASE}/list.php"
     out: list[dict] = []
     page = 1
+    sys.stdout.write("walking pages: ")
+    sys.stdout.flush()
     while True:
-        if page > 1:
-            await asyncio.sleep(random.uniform(1.0, 2.0))
         r = await client.get(url, params={"man": man_id, "page": page}, timeout=15)
         r.raise_for_status()
         items, total_pages = _parse_page(r.text)
         out.extend(items)
+        sys.stdout.write(".")
+        sys.stdout.flush()
         if page >= total_pages:
             break
         page += 1
-    # Fetch individual product pages for descriptions
-    for item in out:
-        if item.get("url"):
-            await asyncio.sleep(random.uniform(1.0, 2.0))
-            try:
-                rp = await client.get(item["url"], timeout=15)
-                item["description"] = _parse_product_description(rp.text)
-            except Exception:
-                item["description"] = None
+    sys.stdout.write(f" {page} pages, {len(out)} products\n")
+    sys.stdout.flush()
+    # Fetch individual product pages for descriptions — skip ones already in DB.
+    have_desc = _db.skus_with_description([it.get("sku") for it in out if it.get("sku")])
+    to_fetch = [it for it in out if it.get("url") and it.get("sku") not in have_desc]
+    sys.stdout.write(f"fetching {len(to_fetch)} product pages ({len(have_desc)} cached): ")
+    sys.stdout.flush()
+    for item in to_fetch:
+        try:
+            rp = await client.get(item["url"], timeout=15)
+            item["description"] = _parse_product_description(rp.text)
+        except Exception:
+            item["description"] = None
+        sys.stdout.write(".")
+        sys.stdout.flush()
+    sys.stdout.write("\n")
+    sys.stdout.flush()
     return out

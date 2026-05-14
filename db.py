@@ -47,13 +47,16 @@ CREATE TABLE IF NOT EXISTS hidden_ranges (
 
 
 def _conn() -> sqlite3.Connection:
-    c = sqlite3.connect(DB_PATH)
+    c = sqlite3.connect(DB_PATH, timeout=30)
     c.row_factory = sqlite3.Row
+    c.execute("PRAGMA busy_timeout = 30000")
     return c
 
 
 def init() -> None:
     with _conn() as c:
+        c.execute("PRAGMA journal_mode = WAL")
+        c.execute("PRAGMA synchronous = NORMAL")
         c.executescript(_SCHEMA)
         # Idempotent migrations
         for stmt in (
@@ -67,6 +70,10 @@ def init() -> None:
                 c.execute(stmt)
             except Exception:
                 pass
+        c.execute(
+            "CREATE INDEX IF NOT EXISTS idx_products_man_range "
+            "ON products(manufacturer_slug, range_slug)"
+        )
         # Drop obsolete columns from products (SQLite 3.35+)
         cols = {row[1] for row in c.execute("PRAGMA table_info(products)")}
         for col in ("url", "range_name", "range_group", "manufacturer_price"):
@@ -174,6 +181,24 @@ def set_description(sku: str, description: str) -> None:
             "UPDATE products SET description = ?, updated_at = ? WHERE sku = ?",
             (description, _now(), key),
         )
+
+
+def skus_with_description(skus: list[str]) -> set[str]:
+    keys = [_norm_sku(s) for s in skus if _norm_sku(s)]
+    if not keys:
+        return set()
+    out: set[str] = set()
+    with _conn() as c:
+        # chunk to avoid SQLITE_MAX_VARIABLE_NUMBER
+        for i in range(0, len(keys), 500):
+            chunk = keys[i:i + 500]
+            placeholders = ",".join("?" * len(chunk))
+            rows = c.execute(
+                f"SELECT sku FROM products WHERE description IS NOT NULL AND description != '' AND sku IN ({placeholders})",
+                chunk,
+            ).fetchall()
+            out.update(r[0] for r in rows)
+    return out
 
 
 def add_wishlist(sku: str) -> None:

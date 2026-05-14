@@ -32,10 +32,13 @@ def _price(prices: dict) -> float | None:
 
 
 async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
+    import sys
     cat = range_def["category"]
     out: list[dict] = []
     page = 1
     per_page = 100
+    sys.stdout.write("fetching: ")
+    sys.stdout.flush()
     while True:
         r = await client.get(
             f"{BASE}/wp-json/wc/store/v1/products",
@@ -57,7 +60,11 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
                 "price": _price(p.get("prices") or {}),
                 "description": desc,
             })
+        sys.stdout.write(".")
+        sys.stdout.flush()
         if len(products) < per_page:
             break
         page += 1
+    sys.stdout.write(f" {len(out)} products\n")
+    sys.stdout.flush()
     return out

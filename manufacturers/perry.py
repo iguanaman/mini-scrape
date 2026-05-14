@@ -87,13 +87,18 @@ def _parse_product_description(html: str) -> str | None:
     el = tree.css_first("#tab-description")
     if not el:
         return None
-    return el.text(strip=True) or None
+    txt = re.sub(r"\s+", " ", el.text(separator=" ")).strip()
+    return txt or None
 
 
 async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
+    import sys
+    import db as _db
     path = range_def["path"]
     out: list[dict] = []
     page = 1
+    sys.stdout.write("walking pages: ")
+    sys.stdout.flush()
     while page <= MAX_PAGES:
         suffix = "" if page == 1 else f"page/{page}/"
         url = f"{BASE}/product-category/{path}/{suffix}"
@@ -105,16 +110,26 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
         if not items:
             break
         out.extend(items)
+        sys.stdout.write(".")
+        sys.stdout.flush()
         if not has_next:
             break
         page += 1
-    # Fetch individual product pages for descriptions
-    for item in out:
-        if item.get("url"):
-            await asyncio.sleep(random.uniform(1.0, 2.0))
-            try:
-                rp = await client.get(item["url"], timeout=20)
-                item["description"] = _parse_product_description(rp.text)
-            except Exception:
-                item["description"] = None
+    sys.stdout.write(f" {page} pages, {len(out)} products\n")
+    sys.stdout.flush()
+    # Fetch individual product pages for descriptions — skip ones already in DB.
+    have_desc = _db.skus_with_description([it.get("sku") for it in out if it.get("sku")])
+    to_fetch = [it for it in out if it.get("url") and it.get("sku") not in have_desc]
+    sys.stdout.write(f"fetching {len(to_fetch)} product pages ({len(have_desc)} cached): ")
+    sys.stdout.flush()
+    for item in to_fetch:
+        try:
+            rp = await client.get(item["url"], timeout=20)
+            item["description"] = _parse_product_description(rp.text)
+        except Exception:
+            item["description"] = None
+        sys.stdout.write(".")
+        sys.stdout.flush()
+    sys.stdout.write("\n")
+    sys.stdout.flush()
     return out
