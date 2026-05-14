@@ -56,7 +56,6 @@ _HAS_LISTING_DESC = {"wargamesatlantic", "gamesworkshop", "victrix", "mantic", "
 _PAGE_DESC_SELECTORS = {
     "northstar": None,       # classless <p> tags — handled by custom parser
     "perry": "#tab-description",
-    "grippingbeast": ".product-description",
 }
 
 _INT_RE = re.compile(r"^\d+$")

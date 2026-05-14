@@ -8,11 +8,13 @@ sub-categories rather than products. Leaf categories are the only ones with
 Pagination is not real here — every category, leaf or hub, fits on one page.
 """
 import asyncio
-import random
 import re
 
 from curl_cffi.requests import AsyncSession
 from selectolax.parser import HTMLParser
+
+from . import PRICE_FLOOR
+
 
 SLUG = "grippingbeast"
 NAME = "Gripping Beast"
@@ -33,6 +35,7 @@ RANGES = [
 
 _SKU_TITLE_RE = re.compile(r"^([A-Z][A-Z0-9]{1,12})\s+(.+)$")
 _PRICE_RE = re.compile(r"£\s*([\d,]+\.\d{2})")
+_FIGURES_RE = re.compile(r"\((\d+)\s+Figures?\)\s*$", re.IGNORECASE)
 _CAT_URL_RE = re.compile(r"^/[^/]+--category--(\d+)\.html$")
 MAX_DEPTH = 4  # safety cap on tree descent
 
@@ -91,18 +94,19 @@ def _sub_cat_ids(tree: HTMLParser) -> list[tuple[int, str]]:
     return out
 
 
-async def _fetch_cat(client: AsyncSession, href: str) -> HTMLParser | None:
+async def _fetch_cat(client: AsyncSession, href: str, counter: list[int]) -> HTMLParser | None:
     url = _abs(href)
     r = await client.get(url, timeout=20)
+    counter[0] += 1
     if r.status_code != 200:
         return None
     return HTMLParser(r.text)
 
 
-async def _walk(client: AsyncSession, href: str, seen: set[int], depth: int) -> list[dict]:
+async def _walk(client: AsyncSession, href: str, seen: set[int], depth: int, counter: list[int]) -> list[dict]:
     if depth > MAX_DEPTH:
         return []
-    tree = await _fetch_cat(client, href)
+    tree = await _fetch_cat(client, href, counter)
     if tree is None:
         return []
     items = _parse_products(tree)
@@ -116,7 +120,7 @@ async def _walk(client: AsyncSession, href: str, seen: set[int], depth: int) -> 
     if not fresh:
         return []
     results = await asyncio.gather(
-        *[_walk(client, h, seen, depth + 1) for _cid, h in fresh],
+        *[_walk(client, h, seen, depth + 1, counter) for _cid, h in fresh],
         return_exceptions=True,
     )
     out: list[dict] = []
@@ -126,38 +130,35 @@ async def _walk(client: AsyncSession, href: str, seen: set[int], depth: int) -> 
     return out
 
 
-def _parse_product_description(html: str) -> str | None:
-    tree = HTMLParser(html)
-    el = tree.css_first(".product-description")
-    if not el:
-        return None
-    return el.text(strip=True) or None
-
-
 async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
     cat = range_def["cat"]
     # Best-effort URL — server accepts any stem for a given cat id, redirecting
     # to canonical. Use the slug-equivalent if known, else a placeholder.
     href = f"/x--category--{cat}.html"
     seen = {cat}
-    items = await _walk(client, href, seen, depth=0)
-    # Dedupe by URL.
-    seen_urls: set[str] = set()
+    cat_counter = [0]
+    import sys
+    sys.stdout.write("walking categories: ")
+    sys.stdout.flush()
+    items = await _walk(client, href, seen, 0, cat_counter)
+    sys.stdout.write(f"{cat_counter[0]} pages\n")
+    sys.stdout.flush()
+    # Dedupe by SKU. Drop SKU-less items (not persisted anyway) and under-£15
+    # (filtered out downstream — no point fetching their description pages).
+    # (Same product appears under multiple sub-categories with different URLs.)
+    seen_skus: set[str] = set()
     out: list[dict] = []
     for it in items:
-        u = it.get("url")
-        if not u or u in seen_urls:
+        sku = it.get("sku")
+        price = it.get("price")
+        if not sku or sku in seen_skus or not it.get("url"):
             continue
-        seen_urls.add(u)
+        if not isinstance(price, (int, float)) or price < PRICE_FLOOR:
+            continue
+        seen_skus.add(sku)
         it.pop("_in_stock", None)
+        m = _FIGURES_RE.search(it["title"])
+        it["minis"] = int(m.group(1)) if m else None
+        it["category"] = "minis"
         out.append(it)
-    # Fetch individual product pages for descriptions
-    for item in out:
-        if item.get("url"):
-            await asyncio.sleep(random.uniform(1.0, 2.0))
-            try:
-                rp = await client.get(item["url"], timeout=20)
-                item["description"] = _parse_product_description(rp.text)
-            except Exception:
-                item["description"] = None
     return out
