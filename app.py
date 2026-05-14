@@ -390,6 +390,10 @@ async def search(q: str = Query(..., min_length=1)):
     _hidden = set(db.hidden_skus())
     if _hidden:
         groups = [g for g in groups if not any(_norm_sku(s) in _hidden for s in (g.get("skus") or []))]
+    _owned = db.owned_counts()
+    for g in groups:
+        first_sku = db.norm_sku((g.get("skus") or [""])[0])
+        g["owned"] = _owned.get(first_sku, 0)
     retailers_meta = [
         {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
     ]
@@ -430,6 +434,9 @@ async def manufacturer_range(man_slug: str, range_slug: str):
     _hidden = set(db.hidden_skus())
     if _hidden:
         products = [p for p in products if _norm_sku(p.get("sku")) not in _hidden]
+    _owned = db.owned_counts()
+    for p in products:
+        p["owned"] = _owned.get(db.norm_sku(p.get("sku") or ""), 0)
     retailers_meta = [
         {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
     ]
