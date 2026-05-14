@@ -392,8 +392,10 @@ async def search(q: str = Query(..., min_length=1)):
         groups = [g for g in groups if not any(_norm_sku(s) in _hidden for s in (g.get("skus") or []))]
     _owned = db.owned_counts()
     for g in groups:
-        first_sku = db.norm_sku((g.get("skus") or [""])[0])
-        g["owned"] = _owned.get(first_sku, 0)
+        g["owned"] = next(
+            (_owned[_norm_sku(s)] for s in (g.get("skus") or []) if _norm_sku(s) in _owned),
+            0
+        )
     retailers_meta = [
         {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
     ]
