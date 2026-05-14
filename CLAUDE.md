@@ -1,29 +1,55 @@
 # mini-scrape — project notes for Claude
 
-Personal localhost tool. Type a product name (or SKU), see prices from 4 UK miniature wargaming retailers as grouped product cards sorted by cheapest in-stock price.
+Personal localhost tool. Type a product name (or SKU), see prices from 4 UK miniature wargaming retailers as grouped product cards sorted by cheapest in-stock price. Home page also shows hardcoded manufacturer ranges — clicking a range fetches the manufacturer's product list directly. Clicking a product card with no prices triggers a background SKU search (shimmer animation, non-clickable while loading) and updates the sticker live; a second click opens the search tab. Cards with prices already cached open the search tab immediately.
+
+## Deep-dive references
+Read these on demand — not loaded by default:
+- `docs/retailers.md` — per-retailer scraping specifics (Goblin, Wayland, Firestorm, Element).
+- `docs/manufacturers.md` — per-manufacturer specifics (North Star, Wargames Atlantic, Games Workshop).
+- `docs/internals.md` — `/search` pipeline, grouping algorithm, frontend layout details.
+- `docs/db.md` — sqlite schema, write paths, wishlist behaviour.
 
 ## Stack
 - Python 3.11+, uv-managed venv
 - FastAPI + Jinja2
-- **curl_cffi** for all HTTP (TLS impersonation, `chrome120`). Replaces httpx because Wayland is behind PerimeterX and plain httpx gets 403. Standardising on one client across all retailers.
+- **curl_cffi** for all HTTP (TLS impersonation, `chrome120`). Replaces httpx because Wayland is behind PerimeterX and plain httpx gets 403. Standardising on one client across retailers + manufacturers.
 - selectolax for HTML parsing where retailers don't have JSON APIs
-- Frontend: one Jinja template + vanilla JS + Tailwind CDN (sticky search bar, flex-wrap centered cards, collapsible left sidebar with shipping thresholds)
+- **sqlite** (`main.db`) for persistent product cache + wishlist + hidden flags. Single file, additive `ALTER TABLE` migrations on startup (idempotent). See `docs/db.md`.
+- Frontend: one Jinja template + vanilla JS + Tailwind CDN. Sticky header (home/wishlist links + centered search + store-filter icons). Collapsible left sidebar with shipping thresholds. Grid cards with heart (wishlist) and eye (hide) icon toggles on SKU'd cards — both fade in on hover (500ms), heart stays visible when wishlisted.
 
 ## Layout
 ```
-app.py                  FastAPI app, /search, grouping, in-memory cache, logging
+app.py                  FastAPI app, /search, /manufacturers, /manufacturer/{slug}/{range},
+                        /wishlist (page) + /api/wishlist[...], grouping, in-memory caches, logging
+db.py                   sqlite helpers (products + wishlist + hidden columns), schema init + migrations on startup
 retailers/
   __init__.py           IMPERSONATE = "chrome120"
   goblin.py             Shopify /search?q=... HTML + ld+json Product blocks
-  wayland.py            Magento GraphQL via /api/graphql (productSearch op)
+  wayland.py            Magento GraphQL via /api/graphql (productSearch op, relevance sort)
   element.py            Custom-platform HTML, selectolax
   firestorm.py          Custom-platform HTML (/products?q=), selectolax
-static/icons/           Retailer favicons (goblin.webp, wayland.png, firestorm.png, element.ico)
+  overlord.py           Shopify /search/suggest.json (Overlord Games)
+  nemc.py               WooCommerce HTML /?s=<q> (North East Model Centre)
+manufacturers/
+  __init__.py           MANUFACTURERS list
+  northstar.py          North Star Figures — list.php?man=<id>&page=<n>
+  wargamesatlantic.py   Wargames Atlantic — Shopify collections/{handle}/products.json
+  gamesworkshop.py      Games Workshop — piggybacks on Goblin Gaming's Shopify storefront
+                        (GW's own site is AWS-WAF walled). ~70 ranges grouped by game system,
+                        SKUs populated from Goblin's variant fields.
+  victrix.py            Victrix — Shopify (collections/{handle}/products.json). 28mm only.
+  mantic.py             Mantic — WooCommerce Store API (/wp-json/wc/store/v1/products).
+  warlord.py            Warlord Games — Shopify at store.warlordgames.com.
+  perry.py              Perry Miniatures — WooCommerce HTML, top sub-categories only.
+  grippingbeast.py      Gripping Beast — legacy CMS, tree-walks deep category hierarchy.
+docs/                   Deep-dive references (see above).
+static/icons/           Retailer + manufacturer favicons
 templates/index.html    Frontend
 .vscode/tasks.json      "uv run uvicorn app:app --reload" as default build task
-tmp/                    Scratch scripts + HTML/JSON dumps. Gitignored.
+.tmp/                   Scratch scripts + HTML/JSON dumps. Gitignored. Dot-prefix so uvicorn's watchfiles default-excludes it from --reload watching.
 server.txt              Server log (stdout + file). Gitignored.
 .playwright-mcp/        Playwright MCP artefacts. Gitignored.
+main.db                 sqlite product cache + wishlist. Gitignored.
 ```
 
 ## Retailer interface
@@ -45,113 +71,82 @@ Each returned item:
 }
 ```
 
-## /search endpoint
-- Runs all retailers in parallel via `asyncio.gather(return_exceptions=True)` on one shared `curl_cffi.requests.AsyncSession(impersonate="chrome120", timeout=15)`. One retailer failing doesn't break others; the exception is logged to `server.txt` and surfaced in the response `errors` map.
-- 15-minute in-memory dict cache keyed on lowercased+stripped query. Process-local; wiped on `--reload`.
-- Post-processing pipeline (in order):
-  1. Title token filter — keep items whose title contains every ≥2-char token from the query (`_query_tokens` / `_title_matches`).
-  2. In-stock filter — drop anything not in stock.
-  3. Price floor — drop anything below £15 or with no price.
-  4. Sort by price asc.
-  5. Group via `_group_results`.
-- Response shape:
-```json
-{
-  "query": "...",
-  "cached": false,
-  "results": [...],          // flat post-filter list, sorted by price
-  "groups": [...],           // grouped product cards (see below)
-  "retailers": [             // for the frontend to render "Not found" rows
-    {"slug": "...", "name": "...", "icon": "..."},
-    ...
-  ],
-  "errors": {"Retailer Name": "ExcType: msg"}
-}
+All retailers hard-capped at **40 items** per search (slice in each module). Per-store request counts to hit that cap:
+- Goblin: 1 (~48/page native)
+- Wayland: 1 (pageSize=40 via GraphQL)
+- Firestorm: 2 (20/page × 2 via `?resultpage=N`)
+- Element: 1 (returns everything in one shot; we slice)
+- Overlord: 1 (Shopify suggest.json, limit=40)
+- NEMC: 1 (~25-35 inline results per query)
+
+## Manufacturer interface
+```python
+SLUG: str
+NAME: str
+ICON: str
+RANGES: list[dict]    # each has at least {"slug": str, "name": str, ...}
+                      # optional "group": str — when present, the /manufacturers
+                      # endpoint relays it and the frontend renders pills under
+                      # per-group headers. Used by Games Workshop to bucket
+                      # ~47 ranges (40k / AoS / Skirmish / Middle-earth / Hobby).
+async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]
 ```
+Each returned product:
+```python
+{"title": str, "sku": str | None, "url": str, "image_url": str | None, "price": float | None}
+```
+The range_def dict is opaque to the caller — each module reads whatever keys it needs (`man_id` for North Star, `handle` for WA, `path` for GW).
 
-## Grouping (`app.py:_group_results`)
-Same product across multiple retailers → one card.
+## Endpoints (overview)
+- `GET /search?q=...` — runs all retailers in parallel, filters + groups, 15-min in-memory cache. For SKU queries, takes only the first result per retailer. Upserts all groups with at least one SKU into `products` (title/image/prices); for SKU queries with no retailer-provided SKU, uses the query itself as the SKU. Full pipeline + response shape in `docs/internals.md`.
+- `GET /manufacturers` — list of manufacturers and their ranges for the home view. Each range includes `"hidden": bool`.
+- `GET /manufacturer/{slug}/{range_slug}` — products for one range. 15-min cache. `price >= £15`, sorted by SKU. Upserts each SKU'd product into `products` (manufacturer slug + price).
+- `GET /wishlist` — SPA shell, same template as `/`. Frontend switches to wishlist mode and renders cached prices.
+- `GET /api/wishlist` — wishlisted product rows with retailers meta.
+- `GET /api/wishlist/skus` — list of wishlisted SKUs (used to render hearts on cards).
+- `POST /api/wishlist/{sku}` / `DELETE /api/wishlist/{sku}` — toggle wishlist flag.
+- `POST /api/hide/{sku}` / `DELETE /api/hide/{sku}` — hide/unhide a product. Hidden SKUs are filtered from all `/search` and `/manufacturer/{slug}/{range}` responses server-side.
+- `POST /api/hide-range/{man_slug}/{range_slug}` / `DELETE /api/hide-range/{man_slug}/{range_slug}` — hide/unhide a manufacturer range pill. State persists in `hidden_ranges` table; pill is greyed out (opacity-50) in the UI but remains clickable.
 
-**Pass 1 — initial bucketing by `_group_key`:**
-1. `item.sku` if present (uppercased, dashes/spaces stripped) → `sku:SGVP003`.
-2. Else SKU-like pattern in title (e.g. `SGVP003`, `MUH094204`) via `_SKU_RE` → `sku:...`.
-3. Else sorted unique title tokens minus stopwords (`the, a, an, of, and, for, to, in`) → `tokens:stargrave troopers`.
-
-**Pass 2 — merge equivalent groups:**
-Some retailers return SKU and some don't (Goblin/Wayland have SKU; Firestorm/Element don't in listings), so the same product can land in a `sku:...` group AND a `tokens:...` group. We merge two groups when their title token-sets are equal or one is a subset of the other. Prefer the shorter title (Goblin appends collection name like " - Stargrave"); take the union of tokens.
-
-**Per-group fields built up:**
-- `offers[]` — every offer for this group (one per matching retailer hit), sorted in-stock-first then price asc.
-- `cheapest_*` — the cheapest **in-stock** offer (price / url / retailer / icon). Falls back to first offer if none in stock (rare, since post-filter drops out-of-stock).
-- `any_in_stock` — bool. Used by the frontend to render "No stock" sticker when false.
-
-Groups themselves sort: any-in-stock first, then by cheapest price asc.
-
-## Retailer specifics
-
-### Goblin Gaming
-`GET /search?q=<query>` (full HTML page). Parse all `<script type="application/ld+json">` blocks; keep entries where `@type == "Product"`. Each block has `name`, `sku`, `url` (relative), `image` (protocol-relative), `offers.price`, `offers.availability` (`http://schema.org/InStock` or `OutOfStock`).
-- Previously used `/search/suggest.json` (smaller, faster), but that endpoint doesn't index SKU lookups. The full-page response is ~314KB vs ~10KB but reliably finds products by SKU and exposes the SKU back to us (needed for cross-store grouping).
-- Returns up to 10 results (we slice the ld+json blocks).
-- URLs from ld+json include tracking params (`?_pos=...`); we strip the query string.
-
-### Wayland Games
-Behind PerimeterX — TLS fingerprinting via curl_cffi gets through; plain httpx is blocked (403). The HTML search page is a Next.js SPA that loads results client-side via GraphQL.
-
-`POST https://www.waylandgames.co.uk/api/graphql` with op `productSearch`. Variables: `{search, pageSize}` (we use pageSize 10). Schema is snake_case Magento — fields used: `name`, `sku`, `image.url`, `price_range.minimum_price.{regular_price, final_price}.value`, `stock_status`.
-
-Required-looking headers: `content-type: application/json`, `content-currency: GBP`. Referer set to a `/search?query=…` URL to look natural.
-
-Post-filter: drop items where `stock_status != "IN_STOCK"` *inside the retailer module* (Wayland returns lots of out-of-stock noise; pruning early stops it from creating solo groups).
-
-### Firestorm Games
-`GET https://www.firestormgames.co.uk/products?q=<query>` (custom "totalretail" platform). Server-rendered HTML.
-- Cards: `.product-list .item .item-inner`. Title in `.bottom-section .title`; image is a CSS `background-image: url(...)` on `.image span[style]`; URL is the parent `<a href>`.
-- Price: `.price` block. When it also has class `.special`, there's a nested `.small` element = RRP; the remainder = final price. Otherwise just one price.
-- Fallback: `.add-to-basket-list[data-price]` if `.price` parse fails.
-- Stock: `.banner` text — "X in Stock" / "24HR Dispatch*" = in stock; "Out of stock" = not.
-- No SKU on the listing page (only on the product page).
-- Listing capped at 20 per page; we don't paginate.
-
-### Element Games
-`GET https://elementgames.co.uk/search?q=<query>` (custom platform). Server-rendered HTML.
-- Cards: `.productgrid`. Title `h3.producttitle`; image `img.productimage[src,alt]`; URL relative `<a href>`.
-- Price: `.price` element. `.oldprice` (when present) is RRP.
-- Stock detection: each card contains a `.stock_popup` legend showing all four button colours (green/yellow/blue/red) — naive grep for `green-button`/`red-button` would always match. We `decompose()` the popup first, then look at the remaining text for "in stock"/"dispatch" vs "out of stock"/"unavailable".
-- No SKU on the listing page (only on the product page — labelled "SKU / Product Code").
-- Bare `?q=...` sometimes returns 403; adding any extra param avoids it. We currently send just `q` and haven't hit issues, but worth knowing.
-
-## Frontend (`templates/index.html`)
-- Sticky header with centered search input + button. Search syncs with URL (`?q=...`) so it's bookmarkable; `popstate` re-runs the search on back/forward; on initial load if URL has `?q=` it auto-searches.
-- Collapsible left sidebar (peek ~36px showing chevron) listing free-shipping thresholds: Wayland £20, Firestorm £60, Goblin £75, Element £80.
-- `#grid` is `flex flex-wrap justify-center` so a single result sits centered. Each card is fixed `w-72`.
-- Card anatomy:
-  - 240px image area, `object-contain`, clickable → cheapest store's product page (only if any in stock).
-  - Jagged starburst sticker (CSS `clip-path` polygon, 14 points), cream/amber gradient, rotated -6°, positioned `bottom-8 right-3`. Shows cheapest price OR "No stock" when none of the offers are in stock.
-  - Title under image (`line-clamp-2`).
-  - Four retailer rows, always all four shown:
-    - In stock: clickable link → store, shows price.
-    - Out of stock: clickable link → store, italic "No stock".
-    - Not in this group: greyed, italic "Not found", not clickable.
+## Grouping (overview)
+Same product across multiple retailers collapses into one card. Bucket by SKU first (item field, or SKU-pattern found in title), else by sorted title tokens. A second pass fuzzy-merges SKU-keyed and token-keyed groups for the same product (Levenshtein ≤ 1 on tokens ≥ 4 chars, ≥ 70% overlap), with a guard against merging sequence-marker variants (II / III / 2 / 3). Algorithm details + edge cases in `docs/internals.md`.
 
 ## "New retailer" workflow
 1. Open in Playwright MCP (`browser_navigate`), find the search form, submit it.
 2. Capture network calls with `browser_network_requests` — look for the actual data endpoint (JSON, GraphQL, or HTML). Replicate the request shape via `browser_network_request` (request-body / request-headers).
 3. Replicate that exact request with curl_cffi. Confirm same response.
-4. Write parser in `retailers/<name>.py`. Include `SLUG`, `NAME`, `ICON`. Test standalone via `tmp/test_<name>.py`. Try to return `sku` if available — grouping is much better with it.
+4. Write parser in `retailers/<name>.py`. Include `SLUG`, `NAME`, `ICON`. Test standalone via `.tmp/test_<name>.py`. Try to return `sku` if available — grouping is much better with it.
 5. Fetch the retailer's favicon into `static/icons/<slug>.{ext}`.
-6. Wire into `RETAILERS` list in `app.py`. Add a section to this file.
+6. Wire into `RETAILERS` list in `app.py`. Add a section to `docs/retailers.md`.
+
+## "New manufacturer" workflow
+1. Inspect the manufacturer site (Playwright MCP if JS-heavy, or curl_cffi if not) to find their range listing pages.
+2. Add a module to `manufacturers/` with `SLUG`, `NAME`, `ICON`, `RANGES`, `async def fetch_range(range_def, client)`.
+3. Each `RANGES` entry needs `slug` + `name` and whatever keys the scraper needs (man_id, handle, path, …). Add `group` if the manufacturer has many ranges that fall naturally into game systems / categories — the frontend will render pills under per-group headers.
+4. Add icon to `static/icons/`. Wire module into `manufacturers/__init__.py`. No further `app.py` changes — the registry is read generically.
+5. If the manufacturer's own site is hostile (WAF, JS challenges), it's fine to source the catalogue from one of the retailers we already scrape (see Games Workshop → Element).
+6. Add a section to `docs/manufacturers.md`.
 
 ## Conventions
+- After any significant change (new retailer, new manufacturer, new feature, schema change, behaviour change), update CLAUDE.md and the relevant `docs/` file to reflect the new state.
+- Working directory is already the project root — never `cd` into it (or anywhere else) before running bash commands. Use relative paths.
+- After editing any `.py` file, tell the user the server needs a restart before changes take effect. (uvicorn is started with `--reload`, but the user runs it manually and doesn't always have it on — call it out so they know.)
+- For ad-hoc Python probes, write a script to `.tmp/<name>.py` then run `uv run python .tmp/<name>.py`. Do NOT use `uv run python -c "…"` with inline code — long inline commands trip permission prompts.
 - Single user, localhost only — no auth, no rate limiting, no retries.
 - 15s timeout per request.
 - Errors fail loudly in dev (logged with stacktraces to server.txt), gracefully in UI.
-- Tmp scratch scripts go in `tmp/` (gitignored). Use them to dump raw HTML/JSON before writing a parser.
+- Tmp scratch scripts go in `.tmp/` (gitignored). Use them to dump raw HTML/JSON before writing a parser.
 - Playwright MCP is configured at project scope in `.mcp.json` — useful for inspecting JS-rendered pages and network calls.
-- Build order from the original spec is complete (1-5); step 6 (per-retailer streaming) deferred — current UX is "one shot, all retailers, then render".
+- 15-minute in-memory caches for `/search` and `/manufacturer/{slug}/{range}`. Wiped on `--reload`.
 
 ## Run
 ```
 uv run uvicorn app:app --reload
 ```
 or hit `Ctrl+Shift+B` in VS Code (default build task).
+
+## Communication Style
+
+The user is a developer who cares about code quality but doesn't know this specific codebase and doesn't want to think about it. Discuss features and behaviour in plain terms — technical concepts are fine, but don't reference specific files, functions, or code structure unless the user asks. Keep to a high-level.
+
+When describing how something works, talk about user-visible behaviour and modes ("reveal mode — block fades in all at once", "typing mode — types out character by character"), not implementation names. Don't say "the `typeBlock` function reserves min-height" — say "the typing path makes space appear instantly". Name code things only when the user needs to act on them.
