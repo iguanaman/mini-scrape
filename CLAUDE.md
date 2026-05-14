@@ -150,3 +150,5 @@ or hit `Ctrl+Shift+B` in VS Code (default build task).
 The user is a developer who cares about code quality but doesn't know this specific codebase and doesn't want to think about it. Discuss features and behaviour in plain terms — technical concepts are fine, but don't reference specific files, functions, or code structure unless the user asks. Keep to a high-level.
 
 When describing how something works, talk about user-visible behaviour and modes ("reveal mode — block fades in all at once", "typing mode — types out character by character"), not implementation names. Don't say "the `typeBlock` function reserves min-height" — say "the typing path makes space appear instantly". Name code things only when the user needs to act on them.
+
+When brainstorming or designing, don't ask about implementation details (specific column names, route paths, function signatures, migration syntax, etc.) — choose sensible defaults based on the spec and existing patterns. Only ask when there's a genuine product decision the user needs to make.
