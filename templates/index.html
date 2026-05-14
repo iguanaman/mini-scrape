@@ -385,7 +385,26 @@
         </div>`;
     }
 
-    function productCard(p) {
+    function pricesJsonToOffers(prices, allRetailers) {
+      const bySlug = new Map(allRetailers.map(r => [r.slug, r]));
+      return Object.entries(prices || {}).map(([slug, entry]) => {
+        const r = bySlug.get(slug);
+        if (!r) return null;
+        const price = entry && typeof entry === 'object' ? entry.price : entry;
+        const url = entry && typeof entry === 'object' ? entry.url : null;
+        return {
+          retailer: r.name,
+          retailer_slug: slug,
+          retailer_icon: r.icon,
+          url,
+          price: typeof price === 'number' ? price : null,
+          in_stock: typeof price === 'number',
+          found: true,
+        };
+      }).filter(Boolean);
+    }
+
+    function productCard(p, allRetailers) {
       const sku = (p.sku || '').trim();
       const imgInner = p.image_url
         ? `<img src="${esc(p.image_url)}" class="w-full h-full object-contain" alt="${esc(p.title)}" />`
@@ -395,6 +414,7 @@
         .filter(v => typeof v === 'number');
       const cheapestRetailer = retailerPrices.length ? Math.min(...retailerPrices) : null;
       const displayPrice = cheapestRetailer;
+      const hasCachedPrices = !!(allRetailers && allRetailers.length && Object.keys(p.prices || {}).length);
       const livePrice = cheapestRetailer !== null;
       const priceState = livePrice ? 'loaded' : (sku ? 'idle' : 'loaded');
       const stickerBg = livePrice
@@ -419,9 +439,24 @@
           ${eyeSvg(false)}
         </button>` : '';
       const clickable = sku ? 'cursor-pointer hover:shadow-md transition-shadow' : '';
+
+      let offersHtml = '';
+      if (hasCachedPrices) {
+        const offers = pricesJsonToOffers(p.prices, allRetailers);
+        offers.sort((a, b) => {
+          const rank = o => o.in_stock ? 0 : 1;
+          if (rank(a) !== rank(b)) return rank(a) - rank(b);
+          if (rank(a) === 0) return (a.price ?? Infinity) - (b.price ?? Infinity);
+          return 0;
+        });
+        offersHtml = `<div class="offers-section hidden flex flex-col gap-0.5 mt-1 border-t pt-1">
+          ${offers.map(o => offerRow(o, false)).join('')}
+        </div>`;
+      }
+
       return `
         <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col ${clickable}"
-             data-price-state="${priceState}" data-sku="${esc(sku)}">
+             data-price-state="${priceState}" data-sku="${esc(sku)}" data-has-prices="${hasCachedPrices ? '1' : '0'}">
           <div class="relative" style="height:240px">
             ${imgInner}
             ${heartBtn}
@@ -431,6 +466,7 @@
           <div class="px-3 pt-1 pb-2 flex flex-col gap-0.5 flex-1">
             <div class="font-medium text-sm leading-snug line-clamp-2" title="${esc(p.title)}">${esc(p.title)}</div>
             ${sku ? `<div class="text-xs text-gray-500 font-mono">${esc(sku)}</div>` : ''}
+            ${offersHtml}
           </div>
         </div>`;
     }
@@ -449,7 +485,8 @@
           container.innerHTML = `<div class="text-sm text-gray-500 px-2">No products.</div>`;
           return;
         }
-        container.innerHTML = `<div class="grid grid-cols-4 gap-2 p-4 pt-0">${products.map(productCard).join('')}</div>`;
+        const retailers = data.retailers || [];
+        container.innerHTML = `<div class="grid grid-cols-4 gap-2 p-4 pt-0">${products.map(p => productCard(p, retailers)).join('')}</div>`;
         container.querySelectorAll('.heart-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -472,6 +509,17 @@
             if (!sku) return;
             const state = cardEl.dataset.priceState;
             if (state === 'loading') return;
+            if (cardEl.dataset.hasPrices === '1') {
+              const rangeContainer = cardEl.closest('.range-products');
+              const allCards = rangeContainer
+                ? rangeContainer.querySelectorAll('.card-wrap[data-has-prices="1"]')
+                : [cardEl];
+              const opening = cardEl.querySelector('.offers-section')?.classList.contains('hidden');
+              allCards.forEach(c => {
+                c.querySelector('.offers-section')?.classList.toggle('hidden', !opening);
+              });
+              return;
+            }
             if (state === 'loaded') { openSearch(sku); return; }
             enqueueCardPriceFetch(cardEl, sku);
           });
