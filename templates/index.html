@@ -643,8 +643,7 @@
             if (state === 'loading') return;
             if (state === 'loaded') {
               const manUrl = cardEl.dataset.manUrl;
-              if (manUrl) { window.open(manUrl, '_blank', 'noopener'); return; }
-              openSearch(sku);
+              if (manUrl) { window.open(manUrl, '_blank', 'noopener'); }
               return;
             }
             enqueueCardPriceFetch(cardEl, sku);
@@ -715,16 +714,13 @@
         container.querySelectorAll('.card-wrap').forEach(cardEl => {
           cardEl.addEventListener('click', (e) => {
             if (e.target.closest('.heart-btn, .hide-btn, .owned-counter, .expand-toggle')) return;
-            const manUrl = cardEl.dataset.manUrl;
-            if (manUrl) { window.open(manUrl, '_blank', 'noopener'); return; }
             const sku = cardEl.dataset.sku;
             if (!sku) return;
             const state = cardEl.dataset.priceState;
             if (state === 'loading') return;
             if (state === 'loaded') {
               const manUrl = cardEl.dataset.manUrl;
-              if (manUrl) { window.open(manUrl, '_blank', 'noopener'); return; }
-              openSearch(sku);
+              if (manUrl) { window.open(manUrl, '_blank', 'noopener'); }
               return;
             }
             enqueueCardPriceFetch(cardEl, sku);
