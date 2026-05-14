@@ -490,9 +490,11 @@
         </button>` : '';
       const ownedCount = (p.owned !== undefined ? p.owned : (ownedMap.get(normSku(sku)) || 0));
       const ownedBtn = sku ? ownedCounter(sku, ownedCount) : '';
-      const clickable = sku ? 'cursor-pointer hover:shadow-md transition-shadow' : '';
+      const manUrl = p.manufacturer_url || null;
+      const clickable = (sku || manUrl) ? 'cursor-pointer hover:shadow-md transition-shadow' : '';
 
       let offersHtml = '';
+      let toggleBar = '';
       if (hasCachedPrices) {
         const offers = pricesJsonToOffers(p.prices, allRetailers);
         offers.sort((a, b) => {
@@ -504,11 +506,17 @@
         offersHtml = `<div class="offers-section hidden flex-col gap-0.5 mt-1 border-t pt-1" style="display:none">
           ${offers.map(o => offerRow(o, false)).join('')}
         </div>`;
+        toggleBar = `<button type="button" class="expand-toggle w-full text-gray-500 hover:bg-gray-50 hover:text-gray-800 py-0 flex items-center justify-center" aria-label="Expand">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path d="m6 9 6 6 6-6"/>
+          </svg>
+        </button>`;
       }
 
       return `
         <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col ${clickable}"
-             data-price-state="${priceState}" data-sku="${esc(sku)}" data-has-prices="${hasCachedPrices ? '1' : '0'}">
+             data-price-state="${priceState}" data-sku="${esc(sku)}" data-has-prices="${hasCachedPrices ? '1' : '0'}"
+             ${manUrl ? `data-man-url="${esc(manUrl)}"` : ''}>
           <div class="relative" style="height:240px">
             ${imgInner}
             ${heartBtn}
@@ -521,6 +529,7 @@
             ${sku ? `<div class="text-xs text-gray-500 font-mono">${esc(sku)}</div>` : ''}
             ${offersHtml}
           </div>
+          ${toggleBar}
         </div>`;
     }
 
@@ -560,26 +569,27 @@
           });
         });
         bindOwnedCounters(container);
+        container.querySelectorAll('.expand-toggle').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const cardEl = btn.closest('.card-wrap');
+            const sec = cardEl.querySelector('.offers-section');
+            if (!sec) return;
+            const opening = sec.style.display === 'none';
+            sec.style.display = opening ? 'flex' : 'none';
+            btn.querySelector('path').setAttribute('d', opening ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6');
+            btn.setAttribute('aria-label', opening ? 'Collapse' : 'Expand');
+          });
+        });
         container.querySelectorAll('.card-wrap').forEach(cardEl => {
           cardEl.addEventListener('click', (e) => {
-            if (e.target.closest('.heart-btn, .hide-btn, .owned-counter')) return;
+            if (e.target.closest('.heart-btn, .hide-btn, .owned-counter, .expand-toggle')) return;
+            const manUrl = cardEl.dataset.manUrl;
+            if (manUrl) { window.open(manUrl, '_blank', 'noopener'); return; }
             const sku = cardEl.dataset.sku;
             if (!sku) return;
             const state = cardEl.dataset.priceState;
             if (state === 'loading') return;
-            if (cardEl.dataset.hasPrices === '1') {
-              const rangeContainer = cardEl.closest('.range-products');
-              const allCards = rangeContainer
-                ? rangeContainer.querySelectorAll('.card-wrap[data-has-prices="1"]')
-                : [cardEl];
-              const sec = cardEl.querySelector('.offers-section');
-              const opening = sec ? sec.style.display === 'none' : true;
-              allCards.forEach(c => {
-                const s = c.querySelector('.offers-section');
-                if (s) s.style.display = opening ? 'flex' : 'none';
-              });
-              return;
-            }
             if (state === 'loaded') { openSearch(sku); return; }
             enqueueCardPriceFetch(cardEl, sku);
           });
@@ -633,18 +643,27 @@
           });
         });
         bindOwnedCounters(container);
+        container.querySelectorAll('.expand-toggle').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const cardEl = btn.closest('.card-wrap');
+            const sec = cardEl.querySelector('.offers-section');
+            if (!sec) return;
+            const opening = sec.style.display === 'none';
+            sec.style.display = opening ? 'flex' : 'none';
+            btn.querySelector('path').setAttribute('d', opening ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6');
+            btn.setAttribute('aria-label', opening ? 'Collapse' : 'Expand');
+          });
+        });
         container.querySelectorAll('.card-wrap').forEach(cardEl => {
           cardEl.addEventListener('click', (e) => {
-            if (e.target.closest('.heart-btn, .hide-btn, .owned-counter')) return;
+            if (e.target.closest('.heart-btn, .hide-btn, .owned-counter, .expand-toggle')) return;
+            const manUrl = cardEl.dataset.manUrl;
+            if (manUrl) { window.open(manUrl, '_blank', 'noopener'); return; }
             const sku = cardEl.dataset.sku;
             if (!sku) return;
             const state = cardEl.dataset.priceState;
             if (state === 'loading') return;
-            if (cardEl.dataset.hasPrices === '1') {
-              const sec = cardEl.querySelector('.offers-section');
-              if (sec) sec.style.display = sec.style.display === 'none' ? 'flex' : 'none';
-              return;
-            }
             if (state === 'loaded') { openSearch(sku); return; }
             enqueueCardPriceFetch(cardEl, sku);
           });

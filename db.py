@@ -317,7 +317,7 @@ def manufacturers_with_ranges() -> list[dict]:
 def products_for_range(manufacturer_slug: str, range_slug: str) -> list[dict]:
     with _conn() as c:
         rows = c.execute(
-            """SELECT sku, title, image_url, prices_json
+            """SELECT sku, title, image_url, prices_json, manufacturer_url
                FROM products
                WHERE manufacturer_slug = ? AND range_slug = ?
                ORDER BY COALESCE(sku, title)""",
@@ -336,6 +336,7 @@ def products_for_range(manufacturer_slug: str, range_slug: str) -> list[dict]:
             "title": r["title"],
             "image_url": r["image_url"],
             "prices": prices,
+            "manufacturer_url": r["manufacturer_url"],
         })
     return out
 
@@ -351,7 +352,7 @@ def wishlist_skus() -> list[str]:
 def wishlist_products() -> list[dict]:
     with _conn() as c:
         rows = c.execute(
-            """SELECT sku, title, image_url, manufacturer_slug,
+            """SELECT sku, title, image_url, manufacturer_slug, manufacturer_url,
                       prices_json, minis, owned, updated_at, wishlisted_at
                FROM products
                WHERE wishlisted_at IS NOT NULL
@@ -370,6 +371,7 @@ def wishlist_products() -> list[dict]:
             "title": r["title"],
             "image_url": r["image_url"],
             "manufacturer_slug": r["manufacturer_slug"],
+            "manufacturer_url": r["manufacturer_url"],
             "prices": prices,
             "minis": r["minis"],
             "owned": r["owned"],
