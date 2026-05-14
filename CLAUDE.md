@@ -107,6 +107,7 @@ The range_def dict is opaque to the caller — each module reads whatever keys i
 - `POST /api/wishlist/{sku}` / `DELETE /api/wishlist/{sku}` — toggle wishlist flag.
 - `POST /api/hide/{sku}` / `DELETE /api/hide/{sku}` — hide/unhide a product. Hidden SKUs are filtered from all `/search` and `/manufacturer/{slug}/{range}` responses server-side.
 - `POST /api/hide-range/{man_slug}/{range_slug}` / `DELETE /api/hide-range/{man_slug}/{range_slug}` — hide/unhide a manufacturer range pill. State persists in `hidden_ranges` table; pill is greyed out (opacity-50) in the UI but remains clickable.
+- `POST /api/owned/{sku}` — set owned count for a SKU (`{"count": N}`, N ≥ 0). Persists in `products.owned`. Returned inline with search/manufacturer/wishlist responses as `owned: int`. Cards show a +/− counter bottom-left; hidden on hover when 0, always visible when > 0.
 
 ## Grouping (overview)
 Same product across multiple retailers collapses into one card. Bucket by SKU first (item field, or SKU-pattern found in title), else by sorted title tokens. A second pass fuzzy-merges SKU-keyed and token-keyed groups for the same product (Levenshtein ≤ 1 on tokens ≥ 4 chars, ≥ 70% overlap), with a guard against merging sequence-marker variants (II / III / 2 / 3). Algorithm details + edge cases in `docs/internals.md`.

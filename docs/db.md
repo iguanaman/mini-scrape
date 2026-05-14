@@ -2,7 +2,7 @@
 
 Single file `main.db` at project root. Gitignored. Schema initialised on app startup via `db.init()` — `CREATE TABLE IF NOT EXISTS`, then additive `ALTER TABLE` migrations that swallow "duplicate column" errors, so they're safe to run against existing DBs.
 
-Two tables: `products` (SKU cache, wishlist, hidden flags) and `hidden_ranges` (manufacturer range visibility).
+Two tables: `products` (SKU cache, wishlist, hidden flags, owned count) and `hidden_ranges` (manufacturer range visibility).
 
 ## Schema
 
@@ -17,11 +17,12 @@ CREATE TABLE products (
     minis INTEGER,                   -- count of miniatures in the box; manual, default NULL
     wishlisted_at TEXT,              -- ISO-8601 UTC; NULL = not on wishlist
     hidden INTEGER NOT NULL DEFAULT 0, -- 1 = hidden from search/range results
+    owned INTEGER NOT NULL DEFAULT 0,  -- user-tracked count of units owned
     updated_at TEXT
 );
 ```
 
-`hidden` was added via migration — older DBs get it automatically on first startup after the update.
+`hidden` and `owned` were added via migration — older DBs get them automatically on first startup after the update.
 
 No separate wishlist or hidden-SKU table — flags live on the products row.
 
@@ -49,6 +50,7 @@ New table, created via `_SCHEMA` (idempotent). No migration needed for existing 
 6. **`DELETE /api/hide/{sku}`**: `UPDATE products SET hidden = 0`.
 7. **`POST /api/hide-range/{man_slug}/{range_slug}`**: `INSERT OR IGNORE` into `hidden_ranges`.
 8. **`DELETE /api/hide-range/{man_slug}/{range_slug}`**: `DELETE FROM hidden_ranges` where (man_slug, range_slug) matches.
+9. **`POST /api/owned/{sku}`** with body `{"count": N}`: upserts `owned = N` (clamped ≥ 0). Setting to 0 is the "remove" — no separate DELETE. Creates a skeleton row if the SKU has never been seen.
 
 All upserts use `COALESCE` for `title` to avoid blanking existing values. For `image_url`: retailer upserts use `COALESCE(products.image_url, excluded.image_url)` — existing image wins (manufacturer images are higher quality and shouldn't be overwritten by retailer thumbnails). Manufacturer upserts use `COALESCE(excluded.image_url, products.image_url)` — new manufacturer image wins.
 
