@@ -40,6 +40,10 @@ class OwnedBody(BaseModel):
     count: int = Field(ge=0)
 
 
+class MinisBody(BaseModel):
+    count: int = Field(ge=0)
+
+
 @app.exception_handler(Exception)
 async def log_unhandled(request: Request, exc: Exception):
     log.exception("Unhandled error on %s %s", request.method, request.url.path)
@@ -321,9 +325,9 @@ def _group_results(items: list[dict], query_tokens: frozenset[str] = frozenset()
 
 def _persist_search_groups(groups: list[dict], query_sku: str | None = None) -> None:
     for g in groups:
-        skus = g.get("skus") or []
-        if not skus and query_sku:
-            skus = [query_sku]
+        skus = list(g.get("skus") or [])
+        if query_sku and query_sku not in skus:
+            skus.append(query_sku)
         if not skus:
             continue
         prices: dict[str, dict] = {}
@@ -391,10 +395,15 @@ async def search(q: str = Query(..., min_length=1)):
     if _hidden:
         groups = [g for g in groups if not any(_norm_sku(s) in _hidden for s in (g.get("skus") or []))]
     _owned = db.owned_counts()
+    _minis = db.minis_counts()
     for g in groups:
         g["owned"] = next(
             (_owned[_norm_sku(s)] for s in (g.get("skus") or []) if _norm_sku(s) in _owned),
             0
+        )
+        g["minis"] = next(
+            (_minis[_norm_sku(s)] for s in (g.get("skus") or []) if _norm_sku(s) in _minis),
+            None
         )
     retailers_meta = [
         {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
@@ -501,10 +510,25 @@ async def api_unhide_range(man_slug: str, range_slug: str):
     return JSONResponse({"ok": True})
 
 
+@app.delete("/api/price/{sku}/{retailer_slug}")
+async def delete_price(sku: str, retailer_slug: str):
+    key = db.norm_sku(sku)
+    if not key:
+        return JSONResponse({"error": "invalid sku"}, status_code=400)
+    db.delete_store_price(key, retailer_slug)
+    return {"ok": True}
+
+
 @app.post("/api/owned/{sku}")
 async def api_set_owned(sku: str, body: OwnedBody):
     saved = db.set_owned(sku, body.count)
     return JSONResponse({"sku": db.norm_sku(sku), "owned": saved})
+
+
+@app.post("/api/minis/{sku}")
+async def api_set_minis(sku: str, body: MinisBody):
+    saved = db.set_minis_count(sku, body.count)
+    return JSONResponse({"sku": db.norm_sku(sku), "minis": saved})
 
 
 @app.post("/api/wayland-cookies")
@@ -519,11 +543,55 @@ async def wayland_cookies(request: Request):
     return JSONResponse({"ok": True})
 
 
+@app.get("/api/owned")
+async def owned_list():
+    items = db.owned_products()
+    retailers_meta = [
+        {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
+    ]
+    manufacturers_meta = {
+        m.SLUG: {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in MANUFACTURERS
+    }
+    return JSONResponse({"items": items, "retailers": retailers_meta, "manufacturers": manufacturers_meta})
+
+
+_EMPTY_HOME_DATA = {"manufacturers": [], "retailers": [], "wishlist_skus": []}
+
+
+@app.get("/owned", response_class=HTMLResponse)
+async def owned_page(request: Request):
+    return templates.TemplateResponse(request, "index.html", {"home_data": _EMPTY_HOME_DATA})
+
+
 @app.get("/wishlist", response_class=HTMLResponse)
 async def wishlist_page(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    return templates.TemplateResponse(request, "index.html", {"home_data": _EMPTY_HOME_DATA})
 
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse(request, "index.html")
+    hidden_ranges = db.get_hidden_ranges()
+    mfrs = db.manufacturers_with_ranges()
+    for m in mfrs:
+        for r in m["ranges"]:
+            r["hidden"] = (m["slug"], r["slug"]) in hidden_ranges
+    hidden_skus = set(db.hidden_skus())
+    owned = db.owned_counts()
+    retailers_meta = [{"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS]
+    for m in mfrs:
+        products_by_range = {}
+        for r in m["ranges"]:
+            products = db.products_for_range(m["slug"], r["slug"])
+            if hidden_skus:
+                products = [p for p in products if _norm_sku(p.get("sku")) not in hidden_skus]
+            for p in products:
+                p["owned"] = owned.get(db.norm_sku(p.get("sku") or ""), 0)
+            products_by_range[r["slug"]] = products
+        m["products_by_range"] = products_by_range
+    wishlist_skus = db.wishlist_skus()
+    home_data = {
+        "manufacturers": mfrs,
+        "retailers": retailers_meta,
+        "wishlist_skus": wishlist_skus,
+    }
+    return templates.TemplateResponse(request, "index.html", {"home_data": home_data})
