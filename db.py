@@ -99,6 +99,9 @@ def upsert_from_retailer(sku: str, title: str | None, image_url: str | None,
     key = _norm_sku(sku)
     if not key:
         return
+    blacklisted = get_blacklisted_stores(key)
+    if blacklisted:
+        prices = {k: v for k, v in prices.items() if k not in blacklisted}
     payload = json.dumps(prices)
     now = _now()
     with _conn() as c:
