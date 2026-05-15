@@ -654,7 +654,7 @@
             </div>
           </div>
           <div class="px-3 pt-1 ${canExpand ? 'pb-0' : 'pb-3'} flex flex-col gap-1 flex-1">
-            <div class="font-medium text-sm leading-snug line-clamp-2" title="${esc(g.title)}">${esc(g.title)}</div>
+            <div class="card-title font-medium text-sm leading-snug line-clamp-2" title="${esc(g.title)}">${esc(g.title)}</div>
             ${(g.skus && g.skus.length) ? `<div class="text-xs text-gray-500 font-mono truncate" title="${esc(g.skus.join(', '))}">${esc(g.skus.join(', '))}</div>` : ''}
             <div class="flex flex-col gap-0.5 mt-auto">${offers}</div>
           </div>
@@ -751,7 +751,7 @@
             ${sticker}
           </div>
           <div class="px-3 pt-1 pb-2 flex flex-col gap-0.5 flex-1">
-            ${manUrl ? `<a href="${esc(manUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="font-medium text-sm leading-snug truncate hover:underline decoration-dotted" title="${esc(p.title)}">${esc(p.title)}</a>` : `<div class="font-medium text-sm leading-snug truncate" title="${esc(p.title)}">${esc(p.title)}</div>`}
+            ${manUrl ? `<a href="${esc(manUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="card-title font-medium text-sm leading-snug truncate hover:underline decoration-dotted" title="${esc(p.title)}">${esc(p.title)}</a>` : `<div class="card-title font-medium text-sm leading-snug truncate" title="${esc(p.title)}">${esc(p.title)}</div>`}
             ${sku ? (manUrl ? `<a href="${esc(manUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs text-gray-500 font-mono hover:underline decoration-dotted">${esc(sku)}</a>` : `<div class="text-xs text-gray-500 font-mono">${esc(sku)}</div>`) : ''}
             ${offersHtml}
           </div>
@@ -1522,7 +1522,7 @@
         const retailer = btn.dataset.retailer;
         const rowEl = btn.closest('.offer-row');
         const cardEl = btn.closest('.card-wrap');
-        const titleEl = cardEl ? cardEl.querySelector('.font-medium.text-sm') : null;
+        const titleEl = cardEl ? cardEl.querySelector('.card-title') : null;
         const title = titleEl ? (titleEl.textContent || sku) : sku;
         _deletePriceTarget = { sku, slug, retailer, rowEl, cardEl };
         document.getElementById('delete-price-msg').textContent =
@@ -1541,7 +1541,8 @@
         document.getElementById('delete-price-modal').classList.add('hidden');
         _deletePriceTarget = null;
 
-        await fetch(`/api/price/${encodeURIComponent(sku)}/${encodeURIComponent(slug)}`, { method: 'DELETE' });
+        const resp = await fetch(`/api/price/${encodeURIComponent(sku)}/${encodeURIComponent(slug)}`, { method: 'DELETE' });
+        if (!resp.ok) return;
 
         if (rowEl) rowEl.remove();
 
@@ -1559,7 +1560,13 @@
           if (sticker) {
             const cardSku = cardEl.dataset.sku;
             const minis = cardSku ? (minisMap.get(normSku(cardSku)) || null) : null;
-            sticker.innerHTML = cheapest !== null ? stickerInner(cheapest, minis, 1) : '';
+            if (cheapest !== null) {
+              const { style, t } = stickerStyle(cheapest, minis);
+              sticker.style.cssText = style;
+              sticker.innerHTML = stickerInner(cheapest, minis, t);
+            } else {
+              sticker.innerHTML = '';
+            }
           }
         }
       });
