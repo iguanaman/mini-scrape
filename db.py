@@ -65,6 +65,7 @@ def init() -> None:
             "ALTER TABLE products ADD COLUMN manufacturer_url TEXT",
             "ALTER TABLE products ADD COLUMN description TEXT",
             "ALTER TABLE products ADD COLUMN category TEXT",
+            "ALTER TABLE products ADD COLUMN blacklisted_stores TEXT",
         ):
             try:
                 c.execute(stmt)
@@ -158,6 +159,18 @@ def upsert_from_manufacturer(sku: str, title: str | None, image_url: str | None,
                  updated_at = excluded.updated_at""",
             (key, title, image_url, manufacturer_slug, range_slug, url, description, now),
         )
+
+
+def set_minis_count(sku: str, count: int) -> int:
+    key = _norm_sku(sku)
+    if not key:
+        return count
+    with _conn() as c:
+        c.execute(
+            "UPDATE products SET minis = ?, updated_at = ? WHERE sku = ?",
+            (count, _now(), key),
+        )
+    return count
 
 
 def set_minis(sku: str, count: int | None, category: str) -> None:
@@ -270,6 +283,14 @@ def owned_counts() -> dict[str, int]:
     return {r["sku"]: r["owned"] for r in rows}
 
 
+def minis_counts() -> dict[str, int]:
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT sku, minis FROM products WHERE minis IS NOT NULL AND minis > 0"
+        ).fetchall()
+    return {r["sku"]: r["minis"] for r in rows}
+
+
 def hide_range(man_slug: str, range_slug: str) -> None:
     with _conn() as c:
         c.execute(
@@ -283,6 +304,53 @@ def unhide_range(man_slug: str, range_slug: str) -> None:
         c.execute(
             "DELETE FROM hidden_ranges WHERE man_slug = ? AND range_slug = ?",
             (man_slug, range_slug),
+        )
+
+
+def get_blacklisted_stores(sku: str) -> list[str]:
+    key = _norm_sku(sku)
+    if not key:
+        return []
+    with _conn() as c:
+        row = c.execute(
+            "SELECT blacklisted_stores FROM products WHERE sku = ?", (key,)
+        ).fetchone()
+    if not row or not row["blacklisted_stores"]:
+        return []
+    try:
+        return json.loads(row["blacklisted_stores"])
+    except json.JSONDecodeError:
+        return []
+
+
+def delete_store_price(sku: str, retailer_slug: str) -> None:
+    key = _norm_sku(sku)
+    if not key:
+        return
+    with _conn() as c:
+        row = c.execute(
+            "SELECT prices_json, blacklisted_stores FROM products WHERE sku = ?", (key,)
+        ).fetchone()
+        if not row:
+            return
+        prices: dict = {}
+        if row["prices_json"]:
+            try:
+                prices = json.loads(row["prices_json"])
+            except json.JSONDecodeError:
+                pass
+        prices.pop(retailer_slug, None)
+        blacklisted: list[str] = []
+        if row["blacklisted_stores"]:
+            try:
+                blacklisted = json.loads(row["blacklisted_stores"])
+            except json.JSONDecodeError:
+                pass
+        if retailer_slug not in blacklisted:
+            blacklisted.append(retailer_slug)
+        c.execute(
+            "UPDATE products SET prices_json = ?, blacklisted_stores = ?, updated_at = ? WHERE sku = ?",
+            (json.dumps(prices), json.dumps(blacklisted), _now(), key),
         )
 
 
@@ -321,12 +389,23 @@ def manufacturers_with_ranges() -> list[dict]:
                FROM ranges r
                ORDER BY r.manufacturer_slug, r.name"""
         ).fetchall()
+        cat_rows = c.execute(
+            """SELECT manufacturer_slug, range_slug, category
+               FROM products
+               WHERE manufacturer_slug IS NOT NULL AND range_slug IS NOT NULL"""
+        ).fetchall()
+    range_cats: dict[tuple[str, str], set[str]] = {}
+    for row in cat_rows:
+        key = (row["manufacturer_slug"], row["range_slug"])
+        range_cats.setdefault(key, set()).add(row["category"] if row["category"] else "unknown")
     by_man: dict[str, list] = {}
     for r in ranges:
+        cats = range_cats.get((r["manufacturer_slug"], r["slug"]), set())
         by_man.setdefault(r["manufacturer_slug"], []).append({
             "slug": r["slug"],
             "name": r["name"],
             "group": r["grp"],
+            "categories": sorted(cats),
         })
     out = []
     for m in mfrs:
@@ -342,7 +421,7 @@ def manufacturers_with_ranges() -> list[dict]:
 def products_for_range(manufacturer_slug: str, range_slug: str) -> list[dict]:
     with _conn() as c:
         rows = c.execute(
-            """SELECT sku, title, image_url, prices_json, manufacturer_url
+            """SELECT sku, title, image_url, prices_json, manufacturer_url, minis, category
                FROM products
                WHERE manufacturer_slug = ? AND range_slug = ?
                ORDER BY COALESCE(sku, title)""",
@@ -362,6 +441,8 @@ def products_for_range(manufacturer_slug: str, range_slug: str) -> list[dict]:
             "image_url": r["image_url"],
             "prices": prices,
             "manufacturer_url": r["manufacturer_url"],
+            "minis": r["minis"],
+            "category": r["category"],
         })
     return out
 
@@ -372,6 +453,37 @@ def wishlist_skus() -> list[str]:
             "SELECT sku FROM products WHERE wishlisted_at IS NOT NULL ORDER BY wishlisted_at DESC"
         ).fetchall()
     return [r["sku"] for r in rows]
+
+
+def owned_products() -> list[dict]:
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT sku, title, image_url, manufacturer_slug, manufacturer_url,
+                      prices_json, minis, owned, updated_at
+               FROM products
+               WHERE owned > 0
+               ORDER BY manufacturer_slug NULLS LAST, sku"""
+        ).fetchall()
+    out = []
+    for r in rows:
+        prices = {}
+        if r["prices_json"]:
+            try:
+                prices = json.loads(r["prices_json"])
+            except json.JSONDecodeError:
+                prices = {}
+        out.append({
+            "sku": r["sku"],
+            "title": r["title"],
+            "image_url": r["image_url"],
+            "manufacturer_slug": r["manufacturer_slug"],
+            "manufacturer_url": r["manufacturer_url"],
+            "prices": prices,
+            "minis": r["minis"],
+            "owned": r["owned"],
+            "updated_at": r["updated_at"],
+        })
+    return out
 
 
 def wishlist_products() -> list[dict]:
