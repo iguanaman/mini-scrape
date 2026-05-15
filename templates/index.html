@@ -1557,7 +1557,8 @@
           });
           const sticker = cardEl.querySelector('.sticker');
           if (sticker) {
-            const minis = parseInt(sticker.dataset.minis || '0', 10) || null;
+            const cardSku = cardEl.dataset.sku;
+            const minis = cardSku ? (minisMap.get(normSku(cardSku)) || null) : null;
             sticker.innerHTML = cheapest !== null ? stickerInner(cheapest, minis, 1) : '';
           }
         }
