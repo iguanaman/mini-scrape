@@ -516,7 +516,7 @@ async def delete_price(sku: str, retailer_slug: str):
     if not key:
         return JSONResponse({"error": "invalid sku"}, status_code=400)
     db.delete_store_price(key, retailer_slug)
-    return {"ok": True}
+    return JSONResponse({"ok": True})
 
 
 @app.post("/api/owned/{sku}")
