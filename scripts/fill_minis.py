@@ -41,11 +41,19 @@ log = logging.getLogger("fill_minis")
 LLAMA_URL = "http://127.0.0.1:8081/v1/chat/completions"
 SYSTEM_PROMPT = (
     "You are a helpful assistant that analyses miniature wargaming product descriptions. "
-    "Given a product description, determine how many individual miniature figures are included in the box. "
+    "Given a product name and description, count the total number of individual miniature models included in the box.\n"
+    "Strategy:\n"
+    "1. Scan for digit-form numbers (e.g. 30, 10, 5) near model-type words (figures, infantry, cavalry, vehicles, monsters, etc.). These are the most reliable signal.\n"
+    "2. If no digits, scan for written-out numbers (thirty, ten, five, etc.) near model-type words.\n"
+    "3. Use the product name as context (e.g. 'Box of Elf Infantry' confirms numbers are model counts).\n"
+    "4. Do not trust a number blindly — 25mm is a base size, 128 is a page count.\n"
+    "5. If no figure count is mentioned, fall back to the number of bases included (e.g. 'contains 30 bases' → 30 models).\n"
+    "6. If the same count is restated multiple ways ('build 30... as 30 Warriors'), count it once.\n"
+    "7. Ignore copyright lines, footer text, frame names, and noise.\n"
     "Reply with ONLY one of:\n"
-    "- A plain integer (e.g. 20) if you can determine the count\n"
-    "- minis  if the product contains miniatures but you cannot determine the count\n"
-    "- A category word (e.g. book, paint, terrain, dice, accessory) if the product does not contain miniatures\n"
+    "- A plain integer if you can determine the model count\n"
+    "- minis  if it contains miniatures but quantity is truly unknown\n"
+    "- A category word (book, paint, terrain, dice, accessory) if no miniatures\n"
     "No explanation. No punctuation. Just the value."
 )
 
@@ -59,16 +67,28 @@ _PAGE_DESC_SELECTORS = {
 }
 
 _INT_RE = re.compile(r"^\d+$")
+_NS_SKIP_RE = re.compile(r"^(©|Site by|Trade Logon|Our Price)", re.IGNORECASE)
+_BLOCK_TAG_RE = re.compile(r"<(script|style|head|iframe)[^>]*>.*?</(script|style|head|iframe)>", re.IGNORECASE | re.DOTALL)
+_DATA_SHEETS_RE = re.compile(r"<[^>]*data-sheets-[^>]*>", re.IGNORECASE)
+_HTML_RE = re.compile(r"<[^>]+>")
 
 
-def _call_llama(description: str) -> str:
+def _clean_description(html: str) -> str:
+    text = _BLOCK_TAG_RE.sub(" ", html)
+    text = _DATA_SHEETS_RE.sub(" ", text)
+    text = _HTML_RE.sub(" ", text)
+    return " ".join(text.split())[:1200]
+
+
+def _call_llama(description: str, title: str = "") -> str:
+    user_content = f"Product: {title}\n\n{_clean_description(description)}" if title else _clean_description(description)
     payload = _json.dumps({
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": description},
+            {"role": "user", "content": user_content},
         ],
         "temperature": 0,
-        "max_tokens": 16,
+        "thinking_budget_tokens": 0,
     }).encode()
     req = urllib.request.Request(
         LLAMA_URL,
@@ -93,7 +113,10 @@ def _fetch_page_description(html: str, man_slug: str) -> str | None:
     from selectolax.parser import HTMLParser
     tree = HTMLParser(html)
     if man_slug == "northstar":
-        paras = [p.text(strip=True) for p in tree.css("p") if not p.attributes.get("class") and len(p.text(strip=True)) > 20]
+        paras = [p.text(strip=True) for p in tree.css("p")
+                 if not p.attributes.get("class")
+                 and len(p.text(strip=True)) > 20
+                 and not _NS_SKIP_RE.match(p.text(strip=True))]
         return "\n\n".join(paras) or None
     sel = _PAGE_DESC_SELECTORS.get(man_slug)
     if sel:
@@ -107,12 +130,12 @@ def _rows_to_process(overwrite: bool) -> list[dict]:
     conn.row_factory = sqlite3.Row
     if overwrite:
         rows = conn.execute(
-            """SELECT sku, manufacturer_slug, manufacturer_url, description
+            """SELECT sku, title, manufacturer_slug, manufacturer_url, description
                FROM products WHERE hidden = 0"""
         ).fetchall()
     else:
         rows = conn.execute(
-            """SELECT sku, manufacturer_slug, manufacturer_url, description
+            """SELECT sku, title, manufacturer_slug, manufacturer_url, description
                FROM products
                WHERE hidden = 0 AND minis IS NULL AND category IS NULL"""
         ).fetchall()
@@ -148,7 +171,7 @@ async def _stage2(overwrite: bool) -> None:
                 continue
 
             try:
-                raw = _call_llama(description)
+                raw = _call_llama(description, title=row.get("title", ""))
                 count, category = _parse_llama(raw)
                 db.set_minis(sku, count, category)
                 log.info("[%d/%d] %s → %s (%s)", i + 1, len(rows), sku, count if count is not None else "?", category)

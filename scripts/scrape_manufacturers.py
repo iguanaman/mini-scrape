@@ -3,7 +3,7 @@
 Manufacturers run in parallel; ranges within a manufacturer run sequentially
 with a 1-2s random gap between requests (looks human, polite per-host).
 
-Same filter as the homepage: price >= £15, sorted by SKU before upsert.
+Same filter as the homepage: price >= £20, sorted by SKU before upsert.
 
 Run with:  uv run python scripts/scrape_manufacturers.py
 """
