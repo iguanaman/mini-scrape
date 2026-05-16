@@ -1695,7 +1695,7 @@
       });
 
       lb.addEventListener('click', (e) => {
-        if (lbOverlays.contains(e.target)) return;
+        if (lbOverlays.contains(e.target) && e.target !== lbOverlays) return;
         if (lbImg.contains(e.target)) {
           const half = lbImg.getBoundingClientRect().left + lbImg.offsetWidth / 2;
           lbShow(e.clientX < half ? lbIdx - 1 : lbIdx + 1);
