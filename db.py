@@ -43,6 +43,11 @@ CREATE TABLE IF NOT EXISTS hidden_ranges (
     range_slug TEXT NOT NULL,
     PRIMARY KEY (man_slug, range_slug)
 );
+CREATE TABLE IF NOT EXISTS excluded_groups (
+    manufacturer_slug TEXT NOT NULL,
+    group_name        TEXT NOT NULL,
+    PRIMARY KEY (manufacturer_slug, group_name)
+);
 """
 
 
@@ -137,6 +142,38 @@ def upsert_range(slug: str, manufacturer_slug: str, name: str, group: str | None
                  grp = excluded.grp""",
             (slug, manufacturer_slug, name, group),
         )
+
+
+def delete_group(man_slug: str, group_name: str) -> None:
+    with _conn() as c:
+        range_rows = c.execute(
+            "SELECT slug FROM ranges WHERE manufacturer_slug = ? AND grp = ?",
+            (man_slug, group_name),
+        ).fetchall()
+        range_slugs = [r["slug"] for r in range_rows]
+        if range_slugs:
+            placeholders = ",".join("?" * len(range_slugs))
+            c.execute(
+                f"DELETE FROM products WHERE manufacturer_slug = ? AND range_slug IN ({placeholders})",
+                [man_slug, *range_slugs],
+            )
+            c.execute(
+                f"DELETE FROM ranges WHERE manufacturer_slug = ? AND slug IN ({placeholders})",
+                [man_slug, *range_slugs],
+            )
+        c.execute(
+            "INSERT OR REPLACE INTO excluded_groups (manufacturer_slug, group_name) VALUES (?, ?)",
+            (man_slug, group_name),
+        )
+
+
+def is_group_excluded(man_slug: str, group_name: str) -> bool:
+    with _conn() as c:
+        row = c.execute(
+            "SELECT 1 FROM excluded_groups WHERE manufacturer_slug = ? AND group_name = ?",
+            (man_slug, group_name),
+        ).fetchone()
+    return row is not None
 
 
 def upsert_from_manufacturer(sku: str, title: str | None, image_url: str | None,
@@ -393,22 +430,42 @@ def manufacturers_with_ranges() -> list[dict]:
                ORDER BY r.manufacturer_slug, r.name"""
         ).fetchall()
         cat_rows = c.execute(
-            """SELECT manufacturer_slug, range_slug, category
+            """SELECT manufacturer_slug, range_slug, category, minis, prices_json
                FROM products
-               WHERE manufacturer_slug IS NOT NULL AND range_slug IS NOT NULL"""
+               WHERE manufacturer_slug IS NOT NULL AND range_slug IS NOT NULL AND hidden = 0"""
         ).fetchall()
     range_cats: dict[tuple[str, str], set[str]] = {}
+    range_min_ppm: dict[tuple[str, str], float] = {}
     for row in cat_rows:
         key = (row["manufacturer_slug"], row["range_slug"])
         range_cats.setdefault(key, set()).add(row["category"] if row["category"] else "unknown")
+        minis = row["minis"]
+        if minis and minis > 0:
+            try:
+                prices_raw = json.loads(row["prices_json"] or "{}")
+                prices = [
+                    (v["price"] if isinstance(v, dict) else v)
+                    for v in prices_raw.values()
+                    if v is not None and (isinstance(v, (int, float)) or (isinstance(v, dict) and v.get("price") is not None))
+                ]
+                prices = [p for p in prices if isinstance(p, (int, float))]
+                if prices:
+                    ppm = min(prices) / minis
+                    cur = range_min_ppm.get(key)
+                    if cur is None or ppm < cur:
+                        range_min_ppm[key] = ppm
+            except Exception:
+                pass
     by_man: dict[str, list] = {}
     for r in ranges:
         cats = range_cats.get((r["manufacturer_slug"], r["slug"]), set())
+        min_ppm = range_min_ppm.get((r["manufacturer_slug"], r["slug"]))
         by_man.setdefault(r["manufacturer_slug"], []).append({
             "slug": r["slug"],
             "name": r["name"],
             "group": r["grp"],
             "categories": sorted(cats),
+            "min_ppm": round(min_ppm, 4) if min_ppm is not None else None,
         })
     out = []
     for m in mfrs:
