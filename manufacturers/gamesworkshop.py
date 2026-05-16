@@ -103,10 +103,9 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
             else:
                 image_url = None
             sku = h.get("sku") or None
-            # GW SKUs are like "P-247846-99120102232" — strip the "P-XXXXXX-" prefix
-            if sku and sku.startswith("P-"):
-                parts = sku.split("-", 2)
-                sku = parts[2] if len(parts) == 3 else sku
+            # GW SKUs come in various forms; the real barcode is always the last 11 digits
+            if sku and len(sku) > 11:
+                sku = sku[-11:]
             out.append({
                 "title": h.get("name"),
                 "sku": sku,

@@ -119,7 +119,7 @@ async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]:
     sys.stdout.flush()
     # Fetch individual product pages for descriptions — skip ones already in DB.
     have_desc = _db.skus_with_description([it.get("sku") for it in out if it.get("sku")])
-    to_fetch = [it for it in out if it.get("url") and it.get("sku") not in have_desc]
+    to_fetch = [it for it in out if it.get("url") and it.get("sku") not in have_desc and (it.get("price") or 0) >= 20]
     sys.stdout.write(f"fetching {len(to_fetch)} product pages ({len(have_desc)} cached): ")
     sys.stdout.flush()
     for item in to_fetch:
