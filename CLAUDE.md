@@ -1,6 +1,6 @@
 # mini-scrape — project notes for Claude
 
-Personal localhost tool. Type a product name (or SKU), see prices from 4 UK miniature wargaming retailers as grouped product cards sorted by cheapest in-stock price. Home page also shows hardcoded manufacturer ranges — clicking a range fetches the manufacturer's product list directly. Clicking a product card with no prices triggers a background SKU search (shimmer animation, non-clickable while loading) and updates the sticker live; a second click opens the search tab. Cards with prices already cached open the search tab immediately.
+Personal localhost tool. Type a product name (or SKU), see prices from 4 UK miniature wargaming retailers as grouped product cards sorted by cheapest in-stock price. Home page also shows hardcoded manufacturer ranges — clicking a range fetches the manufacturer's product list directly. Clicking a product card with no prices triggers a background SKU search (shimmer animation, non-clickable while loading) and updates the sticker live; a second click opens the image in the lightbox. Cards with prices already cached open the lightbox immediately. Store lines (offer rows) inside a card open the retailer URL in a new tab — clicks stop propagating so they don't trigger the card's lightbox handler.
 
 ## Deep-dive references
 Read these on demand — not loaded by default:
@@ -32,7 +32,9 @@ retailers/
   nemc.py               WooCommerce HTML /?s=<q> (North East Model Centre)
 manufacturers/
   __init__.py           MANUFACTURERS list
-  northstar.py          North Star Figures — list.php?man=<id>&page=<n>
+  northstar.py          North Star Figures — list.php?man=<id>&page=<n>. 17 ranges in 3 groups.
+  artizan.py            Artizan Designs — same CMS/parser as NS, list.php?man=<id>. 10 ranges.
+  crusader.py           Crusader Miniatures — same CMS/parser, list.php?cat=<id>&sub=<id>. 41 ranges.
   wargamesatlantic.py   Wargames Atlantic — Shopify collections/{handle}/products.json
   gamesworkshop.py      Games Workshop — piggybacks on Goblin Gaming's Shopify storefront
                         (GW's own site is AWS-WAF walled). ~70 ranges grouped by game system,
@@ -50,7 +52,7 @@ scripts/
                            throttling via _ThrottledSession.
                            Run: uv run python scripts/scrape_manufacturers.py
   fill_minis.py            Iterates non-hidden products without a category, fetches product
-                           pages for the 3 HTML manufacturers (North Star/Perry/Gripping Beast)
+                           pages for the HTML manufacturers (North Star/Artizan/Crusader/Perry/Gripping Beast)
                            if no description yet, then calls local Llama to infer mini count.
                            Writes minis (int or NULL) + category ("minis", "book", etc.).
                            Run scrape_manufacturers.py first to populate descriptions.
@@ -151,7 +153,7 @@ Same product across multiple retailers collapses into one card. Bucket by SKU fi
 ## Conventions
 - After any significant change (new retailer, new manufacturer, new feature, schema change, behaviour change), update CLAUDE.md and the relevant `docs/` file to reflect the new state.
 - Working directory is already the project root — never `cd` into it (or anywhere else) before running bash commands. Use relative paths.
-- After editing any `.py` file, tell the user the server needs a restart before changes take effect. (uvicorn is started with `--reload`, but the user runs it manually and doesn't always have it on — call it out so they know.)
+- Server restart is only needed when `app.py` or `db.py` change. Changes to manufacturer/retailer modules, scripts, or other `.py` files take effect without a restart (uvicorn `--reload` picks them up, or they're run as scripts). After editing only client-side files (HTML templates, CSS, JS, static assets), tell the user to refresh the page — no restart needed.
 - For ad-hoc Python probes, write a script to `.tmp/<name>.py` then run `uv run python .tmp/<name>.py`. Do NOT use `uv run python -c "…"` with inline code — long inline commands trip permission prompts.
 - Single user, localhost only — no auth, no rate limiting, no retries.
 - 15s timeout per request.

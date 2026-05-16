@@ -7,11 +7,11 @@ Per-manufacturer scraping notes. Each lives in `manufacturers/<slug>.py`.
 - Each product is a `p.prodpara` with: image link (`prod.php?prod=N`), `alt="Photo of <title> (<sku>)"` regex-parsed for title+SKU, `Our Price:£N.NN` text.
 - Page count from `h2` text "page X of Y" — we paginate until we hit Y.
 - Listing thumbs are `imgthN.jpg` (100×100). We replace `imgth` → `img` to get full-size `imgN.jpg` (better for our 240px image area).
-- RANGES list:
-  - Frostgrave (man=195)
-  - Frostgrave: Ghost Archipelago (man=254)
-  - Stargrave (man=295)
-  - Oathmark (man=257)
+- RANGES list with `group` for UI bucketing:
+  - **Game Lines**: Frostgrave (195), Ghost Archipelago (254), Stargrave (295), Oathmark (257), Rangers of Shadow Deep (280), The Silver Bayonet (302), Dracula's America (248)
+  - **North Star Historical**: 1672 (123), 1864 (204), 1866 (100), American Civil War (343), Africa! (87), Spanish Civil War (31), Kadesh (163)
+  - **North Star Fantasy**: Fantasy Worlds (155), Steampunk (207)
+  - **Distributed Ranges**: Great War Miniatures (20), Fireforge Games (124), Conquest Games (102), Shieldwolf Miniatures (167), Trench Crusade (339), Grey For Now Games (308), Muskets & Tomahawks (290), On The Seven Seas (173), Ronin (152), A Fistful Of Kung Fu (162)
 
 ## Wargames Atlantic (`manufacturers/wargamesatlantic.py`)
 Shopify store. `GET https://wargamesatlantic.com/collections/{handle}/products.json?limit=250&page=N`. JSON.
@@ -66,6 +66,26 @@ Legacy custom CMS. URLs are `/<stem>--category--<id>.html`. Server-rendered HTML
 - Product card parser: title in `<h3>` (with SKU prefix — same `[A-Z][A-Z0-9]+` prefix extraction as North Star); price in `p.pcl-product-each-price` with `£N.NN`; image in `img.pcl-product-each-image`; URL in `a.pcl-product-each[href]`; out-of-stock marker is class `pcl-product-each-out-of-stock` on the link (unused — manufacturer interface ignores stock).
 - RANGES: top-level hubs — Plastic Figures (32), SAGA (10), SWORDPOINT (376), JUGULA (490), Viking Age (24), Byzantines (49), Late Romans (105), Age of Arthur (63), Front Rank Figurines (600).
 - SAGA hub expands to ~364 items across many sub-cats; Viking Age and Byzantines are similarly large.
+
+## Artizan Designs (`manufacturers/artizan.py`)
+`GET https://www.artizandesigns.com/list.php?man=<man_id>&page=<n>`. Identical HTML structure to North Star (same underlying CMS). Parser is a direct copy — `p.prodpara`, `imgth→img` thumbnail fix, `alt="Photo of <title> (<sku>)"` regex, `£N.NN` price.
+- £/mini is typically £8/4 = £2.00 for infantry, £7.50/3 = £2.50 for skirmish packs.
+- RANGES (with `group` for UI bucketing):
+  - **Historical**: Second World War (15), First World War (2), 2nd Afghan War (23), March or Die (21), Russian Civil War (28), Dark Ages (17), Renaissance (20)
+  - **Pulp & Skirmish**: Wild West (3), Thrilling Tales (12), Victorian Science Fiction (24)
+
+## Crusader Miniatures (`manufacturers/crusader.py`)
+`GET https://www.crusaderminiatures.com/list.php?cat=<cat>&sub=<sub>&page=<n>`. Same CMS as Artizan/NS, but uses `cat=`/`sub=` params instead of `man=`. Parser identical.
+- £/mini is typically £14/8 = £1.75 for infantry packs, £8/4 = £2.00 for command/small packs.
+- RANGES (41 sub-categories, with `group`):
+  - **Ancients**: Ancient Celts (1/59), Romans (1/2), Roman Empire (1/52), Greeks (1/53), Carthaginians (1/1), Spanish (1/3), Germans (1/46), Numidians (1/30), Persians (1/54), Macedonia (1/61)
+  - **Dark Ages**: Vikings (4/14), Saxons (4/13), Normans (4/12), Byzantine (4/9), El Cid (4/10), Irish (4/11), Scots (4/48), Early Franks & Saxons (4/63)
+  - **Medieval**: Hundred Years War (5/15), Wars of the Roses (5/16), Teutonic Knights (5/60), Later Crusaders (5/56)
+  - **Seven Years War**: British (7/22), Prussians (7/19), Austrians (7/18), French (7/50), Russian (7/51), Woodland Indians (7/58)
+  - **Napoleonics**: French (16/23)
+  - **American Civil War**: ACW (13/39)
+  - **Boxer Rebellion**: Boxers (19/77), Imperial Chinese (19/79), Japan (19/78), Russians (19/25)
+  - **World War II**: British (9/22), German (9/24), Russian (9/25), US (9/26), French (9/23), Polish (9/64), Romanians (9/69), Partisans (9/66)
 
 ## Conquest Games — not implemented
 `conquestgames.co.uk` was unreachable (ECONNREFUSED) during the initial scout. If/when the site is back, candidate approach: probably WooCommerce or a Shopify shop — re-run the platform probe before writing a module.

@@ -2,6 +2,8 @@ PRICE_FLOOR = 20
 
 from . import (
     northstar,
+    artizan,
+    crusader,
     wargamesatlantic,
     gamesworkshop,
     victrix,
@@ -13,6 +15,8 @@ from . import (
 
 MANUFACTURERS = [
     northstar,
+    artizan,
+    crusader,
     wargamesatlantic,
     gamesworkshop,
     victrix,
