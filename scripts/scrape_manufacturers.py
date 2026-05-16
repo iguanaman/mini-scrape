@@ -95,12 +95,19 @@ class _ThrottledSession:
 async def scrape_manufacturer(module) -> tuple[str, int, int, int]:
     """Returns (slug, ranges_ok, ranges_failed, products_upserted)."""
     db.upsert_manufacturer(module.SLUG, module.NAME, module.ICON)
-    for range_def in module.RANGES:
+    active_ranges = [
+        r for r in module.RANGES
+        if not db.is_group_excluded(module.SLUG, r.get("group") or "")
+    ]
+    for range_def in active_ranges:
         db.upsert_range(range_def["slug"], module.SLUG, range_def.get("name", ""), range_def.get("group"))
+    skipped = len(module.RANGES) - len(active_ranges)
+    if skipped:
+        log.info("skip %d excluded-group ranges for %s", skipped, module.SLUG)
     ok = fail = total = 0
     async with AsyncSession(impersonate=IMPERSONATE, timeout=TIMEOUT) as raw:
         client = _ThrottledSession(raw)
-        for range_def in module.RANGES:
+        for range_def in active_ranges:
             label = f"{module.SLUG}/{range_def['slug']}"
             log.info("start %s", label)
             t0 = time.monotonic()
