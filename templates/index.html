@@ -1445,7 +1445,7 @@
             .filter(v => typeof v === 'number');
           return prices.length ? Math.min(...prices) : null;
         };
-        const minisOf = el => productOf(el)?.minis || null;
+        const minisOf = el => { const sku = skuOf(el); return (sku && minisMap.get(normSku(sku))) || productOf(el)?.minis || null; };
         if (selectedSort === 'name') {
           outers.sort((a, b) => titleOf(a).localeCompare(titleOf(b)));
         } else if (selectedSort === 'price_per_mini') {
