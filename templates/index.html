@@ -1137,8 +1137,13 @@
             if (!byGroup.has(g)) { byGroup.set(g, []); groups.push(g); }
             byGroup.get(g).push(r);
           }
-          return groups.map(g => `<div class="pill-group mb-3">
-            <div class="text-xs uppercase tracking-wide text-gray-500 mb-1">${esc(g)}</div>
+          return groups.map(g => `<div class="pill-group mb-3" data-man="${esc(m.slug)}" data-group="${esc(g)}">
+            <div class="flex items-center justify-between mb-1">
+              <div class="text-xs uppercase tracking-wide text-gray-500 group-label">${esc(g)}</div>
+              <button type="button" class="group-delete-btn text-gray-300 hover:text-red-500 ml-2" title="Delete group" aria-label="Delete group">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
             <div class="flex flex-wrap gap-2">${byGroup.get(g).map(r => pill(m.slug, r)).join('')}</div>
           </div>`).join('');
         };
@@ -1187,6 +1192,32 @@
             pill.classList.toggle('opacity-50', nowHidden);
             btn.classList.toggle('text-gray-800', nowHidden);
             btn.classList.toggle('text-gray-400', !nowHidden);
+          });
+        });
+
+        manufacturers.addEventListener('click', async e => {
+          const btn = e.target.closest('.group-delete-btn');
+          if (!btn) return;
+          e.stopPropagation();
+          const group = btn.closest('.pill-group');
+          const manSlug = group.dataset.man;
+          const groupName = group.dataset.group;
+          const labelEl = group.querySelector('.group-label');
+
+          const original = labelEl.textContent;
+          labelEl.innerHTML = `Delete <strong>${esc(groupName)}</strong>?` +
+            `<button class="group-delete-confirm ml-2 text-red-600 underline text-xs">Confirm</button>` +
+            `<button class="group-delete-cancel ml-1 text-gray-500 underline text-xs">Cancel</button>`;
+          btn.style.display = 'none';
+
+          labelEl.querySelector('.group-delete-cancel').addEventListener('click', () => {
+            labelEl.textContent = original;
+            btn.style.display = '';
+          });
+
+          labelEl.querySelector('.group-delete-confirm').addEventListener('click', async () => {
+            await fetch(`/api/group/${encodeURIComponent(manSlug)}/${encodeURIComponent(groupName)}`, { method: 'DELETE' });
+            group.remove();
           });
         });
 
