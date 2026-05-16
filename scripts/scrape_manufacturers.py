@@ -98,6 +98,7 @@ async def scrape_manufacturer(module) -> tuple[str, int, int, int]:
     active_ranges = [
         r for r in module.RANGES
         if not db.is_group_excluded(module.SLUG, r.get("group") or "")
+        and not db.is_range_excluded(module.SLUG, r["slug"])
     ]
     for range_def in active_ranges:
         db.upsert_range(range_def["slug"], module.SLUG, range_def.get("name", ""), range_def.get("group"))

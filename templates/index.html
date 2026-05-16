@@ -1123,6 +1123,10 @@
             class="range-hide px-2 py-1 border-l hover:bg-gray-100 ${r.hidden ? 'text-gray-800' : 'text-gray-400'} hover:text-gray-800" aria-label="Hide range">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
           </button>
+          <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}" title="Delete range"
+            class="range-delete px-2 py-1 border-l hover:bg-gray-100 text-gray-400 hover:text-red-500" aria-label="Delete range">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
         </span>`;
         };
         const renderRanges = (m) => {
@@ -1138,13 +1142,13 @@
             byGroup.get(g).push(r);
           }
           return groups.map(g => `<div class="pill-group mb-3" data-man="${esc(m.slug)}" data-group="${esc(g)}">
-            <div class="flex items-center justify-between mb-1">
-              <div class="text-xs uppercase tracking-wide text-gray-500 group-label">${esc(g)}</div>
-              <button type="button" class="group-delete-btn text-gray-300 hover:text-red-500 ml-2" title="Delete group" aria-label="Delete group">
+            <div class="text-xs uppercase tracking-wide text-gray-500 group-label mb-1">${esc(g)}</div>
+            <div class="flex flex-wrap gap-2 items-center">
+              ${byGroup.get(g).map(r => pill(m.slug, r)).join('')}
+              <button type="button" class="group-delete-btn text-gray-400 hover:text-red-500" title="Delete group" aria-label="Delete group">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <div class="flex flex-wrap gap-2">${byGroup.get(g).map(r => pill(m.slug, r)).join('')}</div>
           </div>`).join('');
         };
         manufacturers.innerHTML = mans.map(m => `
@@ -1192,6 +1196,17 @@
             pill.classList.toggle('opacity-50', nowHidden);
             btn.classList.toggle('text-gray-800', nowHidden);
             btn.classList.toggle('text-gray-400', !nowHidden);
+          });
+        });
+
+        manufacturers.querySelectorAll('.range-delete').forEach(btn => {
+          btn.addEventListener('click', async e => {
+            e.stopPropagation();
+            const man = btn.dataset.man, range = btn.dataset.range;
+            const pill = btn.closest('.range-pill');
+            if (!confirm(`Delete range "${pill.querySelector('.range-btn').textContent}"? This removes all data and prevents re-scraping.`)) return;
+            const res = await fetch(`/api/range/${encodeURIComponent(man)}/${encodeURIComponent(range)}`, { method: 'DELETE' });
+            if (res.ok) pill.remove();
           });
         });
 

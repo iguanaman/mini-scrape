@@ -516,6 +516,12 @@ async def api_delete_group(man_slug: str, group_name: str):
     return JSONResponse({"ok": True})
 
 
+@app.delete("/api/range/{man_slug}/{range_slug}")
+async def api_delete_range(man_slug: str, range_slug: str):
+    db.delete_range(man_slug, range_slug)
+    return JSONResponse({"ok": True})
+
+
 @app.delete("/api/price/{sku}/{retailer_slug}")
 async def delete_price(sku: str, retailer_slug: str):
     key = db.norm_sku(sku)

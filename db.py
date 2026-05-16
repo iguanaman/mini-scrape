@@ -48,6 +48,11 @@ CREATE TABLE IF NOT EXISTS excluded_groups (
     group_name        TEXT NOT NULL,
     PRIMARY KEY (manufacturer_slug, group_name)
 );
+CREATE TABLE IF NOT EXISTS excluded_ranges (
+    manufacturer_slug TEXT NOT NULL,
+    range_slug        TEXT NOT NULL,
+    PRIMARY KEY (manufacturer_slug, range_slug)
+);
 """
 
 
@@ -165,6 +170,31 @@ def delete_group(man_slug: str, group_name: str) -> None:
             "INSERT OR REPLACE INTO excluded_groups (manufacturer_slug, group_name) VALUES (?, ?)",
             (man_slug, group_name),
         )
+
+
+def delete_range(man_slug: str, range_slug: str) -> None:
+    with _conn() as c:
+        c.execute(
+            "DELETE FROM products WHERE manufacturer_slug = ? AND range_slug = ?",
+            (man_slug, range_slug),
+        )
+        c.execute(
+            "DELETE FROM ranges WHERE manufacturer_slug = ? AND slug = ?",
+            (man_slug, range_slug),
+        )
+        c.execute(
+            "INSERT OR REPLACE INTO excluded_ranges (manufacturer_slug, range_slug) VALUES (?, ?)",
+            (man_slug, range_slug),
+        )
+
+
+def is_range_excluded(man_slug: str, range_slug: str) -> bool:
+    with _conn() as c:
+        row = c.execute(
+            "SELECT 1 FROM excluded_ranges WHERE manufacturer_slug = ? AND range_slug = ?",
+            (man_slug, range_slug),
+        ).fetchone()
+    return row is not None
 
 
 def is_group_excluded(man_slug: str, group_name: str) -> bool:
