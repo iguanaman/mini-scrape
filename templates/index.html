@@ -1210,14 +1210,21 @@
             `<button class="group-delete-cancel ml-1 text-gray-500 underline text-xs">Cancel</button>`;
           btn.style.display = 'none';
 
-          labelEl.querySelector('.group-delete-cancel').addEventListener('click', () => {
+          labelEl.querySelector('.group-delete-cancel').addEventListener('click', e => {
+            e.stopPropagation();
             labelEl.textContent = original;
             btn.style.display = '';
           });
 
-          labelEl.querySelector('.group-delete-confirm').addEventListener('click', async () => {
-            await fetch(`/api/group/${encodeURIComponent(manSlug)}/${encodeURIComponent(groupName)}`, { method: 'DELETE' });
-            group.remove();
+          labelEl.querySelector('.group-delete-confirm').addEventListener('click', async e => {
+            e.stopPropagation();
+            const res = await fetch(`/api/group/${encodeURIComponent(manSlug)}/${encodeURIComponent(groupName)}`, { method: 'DELETE' });
+            if (res.ok) {
+              group.remove();
+            } else {
+              labelEl.textContent = original;
+              btn.style.display = '';
+            }
           });
         });
 
