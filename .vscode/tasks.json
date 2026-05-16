@@ -51,7 +51,7 @@
     {
       "label": "Llama Server",
       "type": "shell",
-      "command": "\"/d/Work/github/llama.cpp/llama-server.exe\" -m /d/Work/github/llama.cpp/models/gemma-4-E4B-it-UD-IQ3_XXS.gguf --port 8081 -ngl 99",
+      "command": "\"/d/Work/github/llama.cpp/llama-server.exe\" -m /d/Work/github/llama.cpp/models/Qwen3.5-9B-UD-IQ2_M.gguf --port 8081 -ngl 99 --ctx-size 2048 --cache-ram 16 --reasoning-budget 0",
       "icon": { "id": "hubot", "color": "terminal.ansiCyan" },
       "isBackground": true,
       "problemMatcher": [],

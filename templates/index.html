@@ -52,7 +52,7 @@
     <button id="lb-close" class="absolute top-4 right-4 text-white/70 hover:text-white text-3xl leading-none z-10">&times;</button>
     <div class="relative w-full h-full flex items-center justify-center">
       <img id="lb-img" src="" alt="" class="max-h-[95vh] max-w-[95vw] object-contain cursor-pointer" draggable="false" />
-      <div id="lb-overlays" class="absolute inset-0" style="pointer-events:none"></div>
+      <div id="lb-overlays" class="absolute" style="pointer-events:none"></div>
       <div id="lb-title" class="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm px-3 py-1 text-center max-w-lg pointer-events-none"
            style="color:#fff; text-shadow:0 0 4px #000,0 1px 3px #000,0 -1px 3px #000,1px 0 3px #000,-1px 0 3px #000,0 0 12px #000"></div>
     </div>
@@ -516,7 +516,7 @@
           <img src="${esc(o.retailer_icon)}" class="w-4 h-4 object-contain shrink-0 ${dim ? 'opacity-40' : ''}" alt="" />
           <span class="truncate ${dim ? 'text-gray-400' : ''}">${esc(o.retailer)}</span>
         </span>`;
-      const deleteBtn = sku ? `<button type="button" class="delete-price-btn ml-1 shrink-0 text-gray-300 hover:text-red-500 leading-none text-base"
+      const deleteBtn = sku ? `<button type="button" class="delete-price-btn ml-1 shrink-0 text-gray-400 hover:text-red-500 leading-none text-base"
         data-sku="${esc(sku)}" data-slug="${esc(o.retailer_slug)}" data-retailer="${esc(o.retailer)}"
         onclick="event.preventDefault();event.stopPropagation();showDeletePriceModal(this)"
         title="Remove this store's price">×</button>` : '';
@@ -1455,21 +1455,29 @@
       let lbCards = [];
       let lbIdx = 0;
 
+      function lbPositionOverlays() {
+        const r = lbImg.getBoundingClientRect();
+        const pr = lbImg.parentElement.getBoundingClientRect();
+        lbOverlays.style.left   = (r.left - pr.left) + 'px';
+        lbOverlays.style.top    = (r.top  - pr.top)  + 'px';
+        lbOverlays.style.width  = r.width  + 'px';
+        lbOverlays.style.height = r.height + 'px';
+      }
+
       function lbSyncOverlays(cardEl) {
         lbOverlays.innerHTML = '';
         if (!cardEl) return;
+        lbPositionOverlays();
         const selectors = ['.heart-btn', '.hide-btn', '.owned-counter', '.minis-counter', '.sticker'];
         selectors.forEach(sel => {
           const orig = cardEl.querySelector(sel);
           if (!orig) return;
           const clone = orig.cloneNode(true);
-          // Force visibility — card hover state doesn't apply inside lightbox
           clone.style.opacity = '1';
           clone.style.transition = 'none';
           clone.style.pointerEvents = 'auto';
           const innerBtns = orig.querySelectorAll('button');
           if (innerBtns.length) {
-            // Counter-style element — forward each inner button individually
             clone.querySelectorAll('button').forEach((btn, i) => {
               btn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -1478,7 +1486,6 @@
               });
             });
           } else {
-            // Simple button (heart, hide) — forward click on the clone itself
             clone.addEventListener('click', (e) => {
               e.stopPropagation();
               orig.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -1487,8 +1494,13 @@
           }
           lbOverlays.appendChild(clone);
         });
-        lbOverlays.style.pointerEvents = 'none';
       }
+
+      lbImg.addEventListener('load', () => {
+        if (!lb.classList.contains('hidden') && lbCards[lbIdx]) {
+          lbSyncOverlays(lbCards[lbIdx].el);
+        }
+      });
 
       function lbShow(idx) {
         lbIdx = ((idx % lbCards.length) + lbCards.length) % lbCards.length;
@@ -1496,7 +1508,8 @@
         lbImg.src = c.img;
         lbImg.alt = c.title;
         lbTitle.textContent = c.title;
-        lbSyncOverlays(c.el);
+        // Overlays re-synced on image load (after dimensions are known)
+        lbOverlays.innerHTML = '';
       }
 
       window.openLightbox = function(container, cardEl) {
