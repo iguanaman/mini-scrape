@@ -745,6 +745,7 @@ function sortProducts(products) {
         });
       });
       bindCardClicks(container);
+      applyFilters();
       applyStoreFilterToDOM();
     }
 
@@ -850,6 +851,7 @@ function sortProducts(products) {
       }).join('');
       grid.innerHTML = '';
       bindContainer(manufacturers);
+      applyFilters();
       applyStoreFilterToDOM();
     }
 
