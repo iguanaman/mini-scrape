@@ -99,7 +99,7 @@
   </main>
 
   <script>
-    let HOME_DATA = {{ home_data | tojson }};
+    let HOME_DATA = null;
     let STATIC_MODE = false;
   </script>
   <script>
@@ -114,7 +114,7 @@
     let selectedCategory = 'minis';
     let selectedSort = 'price_per_mini';
     let filterExpensive = 4;
-    let lastRetailers = HOME_DATA.retailers || [];
+    let lastRetailers = [];
     let lastWishlistItems = null;
     let lastOwnedItems = null;
     let wishlistSet = new Set();
@@ -1204,14 +1204,16 @@ function sortProducts(products) {
       showOwned();
     });
 
-    // Initial load — detect static vs live mode then render
+    // Initial load — fetch from live API or fall back to static data.json
     (async () => {
       try {
-        await fetch('/api/ping');
+        const r = await fetch('/api/home-data');
+        if (!r.ok) throw new Error(r.status);
+        HOME_DATA = await r.json();
       } catch (_) {
         STATIC_MODE = true;
         try {
-          const r = await fetch('./static/data.json');
+          const r = await fetch('/static/data.json');
           HOME_DATA = await r.json();
         } catch (e) {
           manufacturers.innerHTML = `<div class="text-sm text-red-700 p-4">Failed to load data.json: ${e}</div>`;

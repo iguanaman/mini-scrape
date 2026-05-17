@@ -3,11 +3,9 @@ import sys
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
-from starlette.requests import Request
 
 from manufacturers import MANUFACTURERS
 import db
@@ -24,7 +22,7 @@ log = logging.getLogger("mini-market")
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+INDEX = str(BASE_DIR / "index.html")
 db.init()
 
 
@@ -97,6 +95,11 @@ async def ping():
     return JSONResponse({"ok": True})
 
 
+@app.get("/api/home-data")
+async def home_data():
+    return JSONResponse(_build_home_data())
+
+
 @app.post("/api/wishlist/{sku}")
 async def wishlist_add(sku: str):
     db.add_wishlist(sku)
@@ -157,16 +160,16 @@ async def api_set_minis(sku: str, body: MinisBody):
     return JSONResponse({"sku": db.norm_sku(sku), "minis": saved})
 
 
-@app.get("/owned", response_class=HTMLResponse)
-async def owned_page(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"home_data": _build_home_data()})
+@app.get("/owned")
+async def owned_page():
+    return FileResponse(INDEX)
 
 
-@app.get("/wishlist", response_class=HTMLResponse)
-async def wishlist_page(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"home_data": _build_home_data()})
+@app.get("/wishlist")
+async def wishlist_page():
+    return FileResponse(INDEX)
 
 
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"home_data": _build_home_data()})
+@app.get("/")
+async def index():
+    return FileResponse(INDEX)

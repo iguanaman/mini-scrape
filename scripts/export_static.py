@@ -1,10 +1,15 @@
 """
-Export DB to static/data.json for static (GitHub Pages) hosting.
+Build dist/ for static (GitHub Pages / local) hosting.
+
+Copies templates/index.html and static/ into dist/, writes dist/static/data.json.
+Asset paths match the live server layout so the same HTML works in both modes.
 
 Usage:
     uv run python scripts/export_static.py
+    python -m http.server 8080 --directory dist
 """
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -22,6 +27,18 @@ RETAILERS = [
     {"slug": "overlord",  "name": "Overlord Games",          "icon": "/static/icons/overlord.png"},
     {"slug": "nemc",      "name": "North East Model Centre", "icon": "/static/icons/nemc.jpg"},
 ]
+
+DIST = ROOT / "dist"
+DIST.mkdir(exist_ok=True)
+
+# Copy static assets
+dist_static = DIST / "static"
+if dist_static.exists():
+    shutil.rmtree(dist_static)
+shutil.copytree(ROOT / "static", dist_static)
+
+# Copy index.html
+shutil.copy(ROOT / "index.html", DIST / "index.html")
 
 db.init()
 
@@ -63,6 +80,7 @@ data = {
     "owned_items": owned_items,
 }
 
-out = ROOT / "static" / "data.json"
+out = DIST / "static" / "data.json"
 out.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-print(f"Written {out} ({out.stat().st_size // 1024}KB)")
+print(f"dist/ built — data.json {out.stat().st_size // 1024}KB")
+print(f"Serve with: python -m http.server 8080 --directory dist")
