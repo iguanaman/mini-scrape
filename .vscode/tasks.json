@@ -75,6 +75,20 @@
       "problemMatcher": []
     },
     {
+      "label": "Serve static (dist/)",
+      "type": "shell",
+      "command": "python -m http.server 8080 --directory dist",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
       "label": "Llama Server",
       "type": "shell",
       "command": "\"/d/Work/github/llama.cpp/llama-server.exe\" -m /d/Work/github/llama.cpp/models/Qwen3.5-9B-UD-IQ2_M.gguf --port 8081 -ngl 99 --ctx-size 2048 --cache-ram 16 --reasoning-budget 0",
