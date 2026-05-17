@@ -156,7 +156,7 @@ async def main(args: argparse.Namespace) -> None:
                         status += f"  ↓ (was £{old_cheapest:.2f})"
                     elif cheapest > old_cheapest:
                         status += f"  ↑ (was £{old_cheapest:.2f})"
-                log.info("%-20s %s", row["sku"], status)
+                log.info("%-20s %-50s %s", row["sku"], (row["title"] or "")[:50], status)
             except WaylandBlockedError:
                 tqdm.write("\nWayland is blocking requests. Update cookies then press Enter to continue...")
                 tqdm.write("Run in another terminal: uv run python scripts/capture_wayland_cookies.py --paste")
