@@ -1348,12 +1348,13 @@ function sortProducts(products) {
               row.style.display = sel.has(row.dataset.slug) ? '' : 'none';
             });
           }
-          // Recompute sticker
+          // Recompute sticker and sort keys
           const stickerEl = outer.querySelector('.sticker');
-          if (stickerEl && stickerEl.dataset.prices) {
-            let pricesBySlug;
-            try { pricesBySlug = JSON.parse(stickerEl.dataset.prices); } catch { pricesBySlug = {}; }
-            const minis = stickerEl.dataset.minis ? parseInt(stickerEl.dataset.minis, 10) : null;
+          let pricesBySlug = {};
+          let minis = null;
+          if (stickerEl) {
+            try { pricesBySlug = JSON.parse(stickerEl.dataset.prices || '{}'); } catch { pricesBySlug = {}; }
+            minis = stickerEl.dataset.minis ? parseInt(stickerEl.dataset.minis, 10) : null;
             const price = computeDisplayPrice(pricesBySlug, sel);
             const s = price !== null ? stickerStyle(price, minis) : { style: '', t: 1 };
             stickerEl.style.cssText = price !== null ? s.style : '';
@@ -1369,9 +1370,13 @@ function sortProducts(products) {
           gridWrappers.forEach(wrapper => {
             const outers = [...wrapper.querySelectorAll(':scope > .card-outer')];
             outers.sort((a, b) => {
-              const key = selectedSort === 'price_per_mini' ? 'ppm' : 'filteredPrice';
-              const pa = a.dataset[key] !== '' ? parseFloat(a.dataset[key]) : null;
-              const pb = b.dataset[key] !== '' ? parseFloat(b.dataset[key]) : null;
+              const val = (el) => {
+                const ppm = el.dataset.ppm !== '' ? parseFloat(el.dataset.ppm) : null;
+                const fp  = el.dataset.filteredPrice !== '' ? parseFloat(el.dataset.filteredPrice) : null;
+                if (selectedSort === 'price_per_mini') return (ppm !== null && !isNaN(ppm)) ? ppm : ((fp !== null && !isNaN(fp)) ? fp : null);
+                return (fp !== null && !isNaN(fp)) ? fp : null;
+              };
+              const pa = val(a), pb = val(b);
               if (pa !== null && pb !== null) return pa - pb;
               if (pa !== null) return -1;
               if (pb !== null) return 1;
