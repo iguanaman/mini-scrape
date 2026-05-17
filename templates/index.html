@@ -668,7 +668,6 @@ function sortProducts(products) {
 
     function showWishlist() {
       manufacturers.innerHTML = '';
-      errors.textContent = '';
       renderStoreFilters();
       populateCategorySelect();
       const items = HOME_DATA.wishlist_items || [];
@@ -729,7 +728,6 @@ function sortProducts(products) {
 
     function showOwned() {
       manufacturers.innerHTML = '';
-      errors.textContent = '';
       renderStoreFilters();
       populateCategorySelect();
       const items = HOME_DATA.owned_items || [];
