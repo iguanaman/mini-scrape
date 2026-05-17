@@ -69,9 +69,9 @@
         </button>
       </div>
       <div class="flex items-end gap-8">
-        <a id="wishlist-link" href="/wishlist" class="text-sm no-underline text-gray-700 hover:text-black pb-0.5">Wishlist</a>
+        <a id="wishlist-link" href="/?page=wishlist" class="text-sm no-underline text-gray-700 hover:text-black pb-0.5">Wishlist</a>
         <a id="home-link" href="/" class="font-bold text-2xl shrink-0 hover:text-gray-600">Mini Market</a>
-        <a id="owned-link" href="/owned" class="text-sm no-underline text-gray-700 hover:text-black pb-0.5">Owned</a>
+        <a id="owned-link" href="/?page=owned" class="text-sm no-underline text-gray-700 hover:text-black pb-0.5">Owned</a>
       </div>
       <div id="store-filters" class="absolute right-4 flex items-center gap-1"></div>
     </div>
@@ -1141,8 +1141,9 @@ function sortProducts(products) {
     });
 
     window.addEventListener('popstate', () => {
-      if (location.pathname === '/wishlist') { manufacturers.innerHTML = ''; showWishlist(); return; }
-      if (location.pathname === '/owned') { manufacturers.innerHTML = ''; showOwned(); return; }
+      const page = new URLSearchParams(location.search).get('page');
+      if (page === 'wishlist') { manufacturers.innerHTML = ''; showWishlist(); return; }
+      if (page === 'owned') { manufacturers.innerHTML = ''; showOwned(); return; }
       grid.innerHTML = ''; showManufacturers();
     });
 
@@ -1176,8 +1177,8 @@ function sortProducts(products) {
 
     document.getElementById('wishlist-link').addEventListener('click', (e) => {
       e.preventDefault();
-      if (location.pathname !== '/wishlist') {
-        history.pushState({}, '', '/wishlist');
+      if (location.search !== '?page=wishlist') {
+        history.pushState({}, '', '/?page=wishlist');
       }
       manufacturers.innerHTML = '';
       showWishlist();
@@ -1185,8 +1186,8 @@ function sortProducts(products) {
 
     document.getElementById('owned-link').addEventListener('click', (e) => {
       e.preventDefault();
-      if (location.pathname !== '/owned') {
-        history.pushState({}, '', '/owned');
+      if (location.search !== '?page=owned') {
+        history.pushState({}, '', '/?page=owned');
       }
       manufacturers.innerHTML = '';
       showOwned();
@@ -1205,9 +1206,10 @@ function sortProducts(products) {
       HOME_DATA = await dataRes.value.json();
       STATIC_MODE = pingRes.status === 'rejected' || !pingRes.value.ok;
       loadWishlistSet();
-      if (location.pathname === '/wishlist') {
+      const page = new URLSearchParams(location.search).get('page');
+      if (page === 'wishlist') {
         showWishlist();
-      } else if (location.pathname === '/owned') {
+      } else if (page === 'owned') {
         showOwned();
       } else {
         showManufacturers();
