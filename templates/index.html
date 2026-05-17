@@ -96,7 +96,8 @@
   </main>
 
   <script>
-    const HOME_DATA = {{ home_data | tojson }};
+    let HOME_DATA = {{ home_data | tojson }};
+    let STATIC_MODE = false;
   </script>
   <script>
     const grid = document.getElementById('grid');
@@ -130,7 +131,7 @@
       if (!key) return;
       const isHidden = btn.dataset.hidden === '1';
       try {
-        await fetch('/api/hide/' + encodeURIComponent(key), { method: isHidden ? 'DELETE' : 'POST' });
+        if (!STATIC_MODE) await fetch('/api/hide/' + encodeURIComponent(key), { method: isHidden ? 'DELETE' : 'POST' });
         if (isHidden) {
           btn.dataset.hidden = '0';
           btn.innerHTML = eyeSvg(false);
@@ -150,7 +151,7 @@
       if (!key) return;
       const inList = wishlistSet.has(key);
       try {
-        await fetch('/api/wishlist/' + encodeURIComponent(key), { method: inList ? 'DELETE' : 'POST' });
+        if (!STATIC_MODE) await fetch('/api/wishlist/' + encodeURIComponent(key), { method: inList ? 'DELETE' : 'POST' });
         if (inList) wishlistSet.delete(key); else wishlistSet.add(key);
         btn.dataset.filled = inList ? '0' : '1';
         btn.innerHTML = heartSvg(!inList);
@@ -227,7 +228,7 @@
         updateSticker(cardEl, price, next || null);
       }
       if (_minisTimers.has(key)) clearTimeout(_minisTimers.get(key));
-      _minisTimers.set(key, setTimeout(async () => {
+      if (!STATIC_MODE) _minisTimers.set(key, setTimeout(async () => {
         _minisTimers.delete(key);
         try {
           await fetch('/api/minis/' + encodeURIComponent(key), {
@@ -292,7 +293,7 @@
       const current = parseInt(counterEl.dataset.owned || '0', 10);
       const next = Math.max(0, current + delta);
       try {
-        await fetch('/api/owned/' + encodeURIComponent(key), {
+        if (!STATIC_MODE) await fetch('/api/owned/' + encodeURIComponent(key), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ count: next }),
@@ -498,7 +499,7 @@
           </div>
           <div class="px-3 pt-1 pb-2 flex flex-col gap-0.5 flex-1">
             ${manUrl ? `<a href="${esc(manUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="card-title font-medium text-sm leading-snug truncate hover:underline decoration-dotted" title="${esc(p.title)}">${esc(p.title)}</a>` : `<div class="card-title font-medium text-sm leading-snug truncate" title="${esc(p.title)}">${esc(p.title)}</div>`}
-            ${sku ? (manUrl ? `<a href="${esc(manUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs text-gray-500 font-mono hover:underline decoration-dotted">${esc(sku)}</a>` : `<div class="text-xs text-gray-500 font-mono">${esc(sku)}</div>`) : ''}
+            ${sku ? (() => { const mfrName = p.manufacturer_slug && HOME_DATA.manufacturers_meta?.[p.manufacturer_slug]?.name; const skuLabel = mfrName ? `${mfrName} | ${sku}` : sku; return manUrl ? `<a href="${esc(manUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-xs text-gray-500 font-mono hover:underline decoration-dotted">${esc(skuLabel)}</a>` : `<div class="text-xs text-gray-500 font-mono">${esc(skuLabel)}</div>`; })() : ''}
             ${offersHtml}
           </div>
           ${toggleBar}
@@ -1195,15 +1196,29 @@ function sortProducts(products) {
       showOwned();
     });
 
-    // Initial load
-    loadWishlistSet();
-    if (location.pathname === '/wishlist') {
-      showWishlist();
-    } else if (location.pathname === '/owned') {
-      showOwned();
-    } else {
-      showManufacturers();
-    }
+    // Initial load — detect static vs live mode then render
+    (async () => {
+      try {
+        await fetch('/api/ping');
+      } catch (_) {
+        STATIC_MODE = true;
+        try {
+          const r = await fetch('./static/data.json');
+          HOME_DATA = await r.json();
+        } catch (e) {
+          manufacturers.innerHTML = `<div class="text-sm text-red-700 p-4">Failed to load data.json: ${e}</div>`;
+          return;
+        }
+      }
+      loadWishlistSet();
+      if (location.pathname === '/wishlist') {
+        showWishlist();
+      } else if (location.pathname === '/owned') {
+        showOwned();
+      } else {
+        showManufacturers();
+      }
+    })();
     // Lightbox
     (function() {
       const lb = document.getElementById('lightbox');
