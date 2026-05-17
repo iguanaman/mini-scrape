@@ -22,7 +22,6 @@ logging.basicConfig(
 log = logging.getLogger("mini-market")
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 INDEX = str(BASE_DIR / "index.html")
 db.init()
 
@@ -99,6 +98,9 @@ async def ping():
 @app.get("/static/data.json")
 async def live_data():
     return JSONResponse(_build_home_data())
+
+
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
 @app.post("/api/wishlist/{sku}")
