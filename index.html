@@ -848,7 +848,6 @@ function sortProducts(products) {
       lastWishlistItems = null;
       lastOwnedItems = null;
       lastRetailers = HOME_DATA.retailers || [];
-      try {
         populateCategorySelect();
         const mans = HOME_DATA.manufacturers || [];
         const pill = (manSlug, r) => {
