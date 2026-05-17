@@ -75,9 +75,9 @@
       "problemMatcher": []
     },
     {
-      "label": "Serve static (dist/)",
+      "label": "Serve static",
       "type": "shell",
-      "command": "python -m http.server 8080 --directory dist",
+      "command": "python -m http.server 8080 --bind 127.0.0.1",
       "options": {
         "cwd": "${workspaceFolder}"
       },
