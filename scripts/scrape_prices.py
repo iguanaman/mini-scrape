@@ -137,7 +137,7 @@ async def main(args: argparse.Namespace) -> None:
     async with AsyncSession(impersonate=IMPERSONATE, timeout=20) as client:
         bar = tqdm(rows, unit="sku", dynamic_ncols=True)
         for i, row in enumerate(bar):
-            bar.set_postfix_str(row["sku"])
+            bar.set_postfix_str((row["title"] or row["sku"])[:50])
             try:
                 prices = await scrape_sku(row["sku"], row["title"], client)
                 old = prev_prices.get(row["sku"], {})
