@@ -1,77 +1,84 @@
 # Internals
 
-Deep details of the /search pipeline, grouping algorithm, and frontend layout.
+Deep details of the frontend layout, data flow, and static mode.
 
-## /search endpoint
-- Runs all retailers in parallel via `asyncio.gather(return_exceptions=True)` on one shared `curl_cffi.requests.AsyncSession(impersonate="chrome120", timeout=15)`. One retailer failing doesn't break others; the exception is logged to `server.txt` and surfaced in the response `errors` map.
-- 15-minute in-memory dict cache keyed on lowercased+stripped query. Process-local; wiped on `--reload`.
-- Post-processing pipeline (in order):
-  1. **SKU cap**: if the query is a SKU (`_is_sku_query`), take at most one result per retailer (the first). Prevents unrelated results leaking in from stores that return a broad list.
-  2. **Match filter** (`_matches`): if the query looks like a SKU (`_is_sku_query`: single token, ≥4 chars, mix of letters and digits), trust every retailer's results (they all index SKU server-side, but most don't echo it back in the title). Otherwise apply the title-token filter — keep items whose title contains every ≥2-char token from the query.
-  3. In-stock filter — drop anything not in stock.
-  4. Price floor — drop anything below £15 or with no price.
-  5. Sort by price asc.
-  6. Group via `_group_results`.
-  7. **Persist**: `_persist_search_groups` upserts all groups that have at least one SKU. For SKU queries where retailers didn't echo back a SKU, the query string itself is used as the authoritative SKU.
-  8. **Hidden filter**: any group where at least one SKU matches a row with `hidden = 1` in the DB is dropped before returning. Uses `_norm_sku` normalisation consistent with the DB write path.
-- Response shape:
+## Data flow
+
+On page load, the frontend fetches `/static/data.json` and `/api/ping` in parallel (`Promise.allSettled`). The data fetch always goes to the same URL — in live mode FastAPI intercepts it and returns fresh DB data; in static mode it's a real file written by `export_static.py`. The ping result determines `STATIC_MODE`.
+
+`HOME_DATA` shape:
 ```json
 {
-  "query": "...",
-  "cached": false,
-  "results": [...],          // flat post-filter list, sorted by price
-  "groups": [...],           // grouped product cards (see below)
-  "retailers": [             // for the frontend to render "Not found" rows
-    {"slug": "...", "name": "...", "icon": "..."},
-    ...
+  "manufacturers": [
+    {
+      "slug": "northstar", "name": "North Star", "icon": "/static/icons/northstar.png",
+      "ranges": [{"slug": "...", "name": "...", "hidden": false, "categories": [...], "min_ppm": 1.2}],
+      "products_by_range": {"range-slug": [{...product...}]}
+    }
   ],
-  "errors": {"Retailer Name": "ExcType: msg"}
+  "manufacturers_meta": {"slug": {"slug": "...", "name": "...", "icon": "..."}},
+  "retailers": [{"slug": "goblin", "name": "Goblin Gaming", "icon": "/static/icons/goblin.webp"}],
+  "wishlist_skus": ["SKU1", "SKU2"],
+  "wishlist_items": [{...product...}],
+  "owned_items": [{...product...}]
 }
 ```
 
-## /manufacturers and /manufacturer/{slug}/{range_slug}
-- `/manufacturers` → JSON `{manufacturers: [{slug, name, icon, ranges: [{slug, name}]}]}`. Used by the home page to render bordered company sections.
-- `/manufacturer/{man}/{range}` → JSON `{manufacturer, range, products}`. Products come from `db.products_for_range` (cached in DB from prior scrapes). Hidden SKUs are filtered out before returning.
+Product shape in `products_by_range` / `wishlist_items` / `owned_items`:
+```json
+{
+  "sku": "SGVP003", "title": "...", "image_url": "...", "manufacturer_url": "...",
+  "prices": {"goblin": {"price": 22.50, "url": "..."}, "wayland": null},
+  "owned": 1, "minis": 20, "category": "minis"
+}
+```
 
-## Grouping (`app.py:_group_results`)
-Same product across multiple retailers → one card.
+`prices` is a dict of retailer slug → `{"price": float|null, "url": str}`. A null value means the retailer was searched but had no stock.
 
-**Pass 1 — initial bucketing by `_group_key`:**
-1. `item.sku` if present (uppercased, dashes/spaces stripped) → `sku:SGVP003`.
-2. Else SKU-like pattern in title (e.g. `SGVP003`, `MUH094204`) via `_SKU_RE` → `sku:...`.
-3. Else sorted unique title tokens minus stopwords (`the, a, an, of, and, for, to, in`) → `tokens:stargrave troopers`.
+## Static mode
 
-**Pass 2 — fuzzy merge:**
-Some retailers return SKU and some don't, so the same product can land in a `sku:...` group AND a `tokens:...` group. We merge two groups when ≥70% of the smaller token-set's tokens are found in the larger set, with fuzzy token equality (Levenshtein ≤ 1 for tokens of length ≥ 4). This catches:
-- "Stargrave Troopers" (tokens) vs `SGVP003` group (sku, no title overlap with SKU)
-- "USA Veterand & Command" vs "Marcher: USA Veterans and Command" — `veterand` ≈ `veterans` (edit distance 1)
-- "Foot Knights" (Goblin sometimes appends collection name) vs "Foot Knights"
+`STATIC_MODE = true` when `/api/ping` fails (no live server). Effects:
+- Write APIs (wishlist, owned, hide, minis) are no-op'd
+- Hide button not rendered
+- Heart shows permanently if wishlisted, not clickable
+- Owned/minis show label only (no +/− controls, no hover animation)
+- Range hide/delete buttons still rendered but their API calls fail silently
 
-**Guard against false merges**: if the two token-sets disagree on a sequence marker (`II`, `III`, `2`, `3`, …), reject the merge. Prevents "Stargrave Scavengers" merging with "Stargrave Scavengers II".
+## Frontend layout
 
-When merging: keep the shorter title (Goblin appends " - Range Name"), union tokens, append offers.
+Sticky header: left — category/sort/filter controls; centre — Wishlist · Mini Market · Owned nav; right — retailer store-filter icons (small, `w-4 h-4`).
 
-**Per-group fields built up:**
-- `offers[]` — every offer for this group (one per matching retailer hit), sorted in-stock-first then price asc.
-- `cheapest_*` — the cheapest **in-stock** offer (price / url / retailer / icon). Falls back to first offer if none in stock (rare, since post-filter drops out-of-stock).
-- `any_in_stock` — bool. Used by the frontend to render "No stock" sticker when false.
+Collapsible left sidebar: click to open, click outside to close. Free-shipping thresholds per retailer.
 
-Groups themselves sort: any-in-stock first, then by cheapest price asc.
+Home view: bordered manufacturer sections. Each section has range pills. Clicking a pill expands an inline product grid below (lazy-loaded from `HOME_DATA.products_by_range`, not a network request). Other open ranges in the same section close.
 
-## Frontend (`templates/index.html`)
-- Sticky header: home link "Mini Market" (left) + centered search input/button + store-filter icons (right, only shown when search results loaded). Search syncs with URL (`?q=...`) so it's bookmarkable; `popstate` re-runs the search; on initial load if URL has `?q=` it auto-searches, otherwise renders manufacturer sections.
-- Home view (no `?q=`): bordered company sections, each with range "buttons". Click a range → expands inline, loads `/manufacturer/{slug}/{range}` lazily (once), shows product grid below the buttons. Product cards click to run a SKU-based search.
-- Collapsible left sidebar: clicking anywhere on it opens; clicking outside closes. Lists free-shipping thresholds: Wayland £20, Firestorm £60, Goblin £75, Element £80.
-- `#grid` is a CSS grid (4 columns) with fixed-width cards.
-- **Store-filter icons** (in header, right side): one icon per retailer. Click to select that store (max one); click again or another to toggle. When a store is selected:
-  - Cards where that store has no in-stock offer are pushed to end and visually `opacity-40 grayscale`.
-  - Within every card, rows for *other* retailers are dimmed (icon `opacity-40`, text `text-gray-400`).
-- Card anatomy (search results):
-  - All cards have class `card-wrap` for hover-reveal CSS.
-  - 240px image area, `object-contain`, clickable → cheapest store's product page (only if any in stock).
-  - **Heart button** (top-left, SKU'd cards only): wishlist toggle. Invisible by default, fades in on card hover (500ms). Stays visible when wishlisted. Toggles `opacity-0` class on unwishlist.
-  - **Eye button** (top-right, SKU'd cards only): hide toggle. Invisible by default, fades in on card hover (500ms). Clicking greys the card (`opacity-40 grayscale`) and switches to closed-eye icon; clicking again restores it. Hidden products don't appear on subsequent searches — the greyed state is just immediate visual feedback before the next load.
-  - Jagged starburst sticker (CSS `clip-path` polygon, 14 points), cream/amber gradient, rotated -6°, positioned `bottom-8 right-3`. Shows cheapest price OR "No stock" when none of the offers are in stock.
-  - Title under image (`line-clamp-2`).
-  - Retailer rows, **sorted**: in-stock by price asc (tiebreak by free-shipping threshold asc — cheaper shipping first), then out-of-stock, then not-found. Layout: small icon + retailer name on left, price / "No stock" / "Not found" on right.
-- Card anatomy (manufacturer products, simpler): image, title, SKU (small/mono), price sticker. **Click-to-fetch**: cards with no retailer prices (`data-price-state="idle"`) show a shimmer animation on first click while a background `/search?q=<sku>` runs; once resolved the sticker updates to the cheapest in-stock price (green gradient) or "No stock". Card is non-clickable during the fetch (`pointer-events: none`). Multiple clicks queue up with a 1.5s gap between fetches. Second click (state `loaded`) opens `/?q=<sku>` in a new tab. Cards that already have cached retailer prices start in `loaded` state and open the search tab immediately. Price stickers are green on all card types (search results and manufacturer products) when in stock.
+Wishlist / Owned views: flat product grids, data from `HOME_DATA.wishlist_items` / `HOME_DATA.owned_items`. Nav links use `history.pushState` so URL updates without a page reload.
+
+## Product cards
+
+Card anatomy (240px image area):
+- **Heart** (top-left, SKU'd only): wishlist toggle. Invisible by default, fades in on hover. Stays visible when wishlisted. In static mode: shows permanently if wishlisted, no interactivity.
+- **Eye/hide** (top-right, SKU'd only): hides the card visually and persists via API. Not rendered in static mode.
+- **Owned counter** (bottom-left, SKU'd only): blue pill. Hidden when 0, fades in on card hover. Hover reveals +/− controls (label fades out, inputs fade in via CSS). In static mode: always visible if > 0, label only, no controls.
+- **Minis counter** (bottom-right, SKU'd only): green pill. Same fade behaviour as owned. In static mode: always visible if > 0, label only.
+- **Price sticker** (bottom-right of image area, above minis): cream/purple radial gradient, rotated -6°. Shows cheapest in-stock price and price-per-mini. Updates dynamically when store filter changes.
+
+Below image: title, SKU (prefixed with manufacturer name), offer rows (expand/collapse toggle). Offer rows sorted: in-stock by price asc, then out-of-stock.
+
+## Store filter
+
+One icon per retailer in the header. Multi-select (click to toggle). When stores selected:
+- Cards where none of the selected stores have stock are hidden
+- Offer rows for non-selected stores are hidden
+- Price sticker updates to cheapest price among selected stores only
+
+## Category / sort / filter controls
+
+- **Category select**: populated from `categories` field on ranges. Filters cards to matching category. "minis" is default.
+- **Sort select**: SKU / Name / Price/mini / Price. Re-sorts all visible grids in place.
+- **< £X/mini filter**: hides cards whose price-per-mini exceeds threshold. Also hides range pills where all products exceed it.
+- **Re-sort button**: re-applies current sort (useful after changing minis counts).
+
+## Lightbox
+
+Click a card image → lightbox opens with full-size image, title, and overlays (owned/minis counters, sticker) cloned from the card. Click image again or press Escape to close.

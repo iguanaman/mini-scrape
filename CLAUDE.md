@@ -1,27 +1,38 @@
 # Mini Market — project notes for Claude
 
-Personal localhost tool. Type a product name (or SKU), see prices from 4 UK miniature wargaming retailers as grouped product cards sorted by cheapest in-stock price. Home page also shows hardcoded manufacturer ranges — clicking a range fetches the manufacturer's product list directly. Clicking a product card with no prices triggers a background SKU search (shimmer animation, non-clickable while loading) and updates the sticker live; a second click opens the image in the lightbox. Cards with prices already cached open the lightbox immediately. Store lines (offer rows) inside a card open the retailer URL in a new tab — clicks stop propagating so they don't trigger the card's lightbox handler.
+Personal tool for browsing miniature wargaming products by manufacturer range, with retailer prices. Home page shows manufacturer sections with range pills — clicking a range expands inline product cards sorted by price-per-mini. Cards show a price sticker, wishlist heart, hide eye, owned counter, and minis counter. Clicking a card image opens a lightbox. Store-filter icons in the header filter cards and offer rows to selected retailers.
 
 ## Deep-dive references
 Read these on demand — not loaded by default:
-- `docs/retailers.md` — per-retailer scraping specifics (Goblin, Wayland, Firestorm, Element).
-- `docs/manufacturers.md` — per-manufacturer specifics (North Star, Wargames Atlantic, Games Workshop).
-- `docs/internals.md` — `/search` pipeline, grouping algorithm, frontend layout details.
+- `docs/retailers.md` — per-retailer scraping specifics.
+- `docs/manufacturers.md` — per-manufacturer specifics.
+- `docs/internals.md` — frontend layout, data flow, static mode details.
 - `docs/db.md` — sqlite schema, write paths, wishlist behaviour.
 
 ## Stack
 - Python 3.11+, uv-managed venv
-- FastAPI + Jinja2
-- **curl_cffi** for all HTTP (TLS impersonation, `chrome120`). Replaces httpx because Wayland is behind PerimeterX and plain httpx gets 403. Standardising on one client across retailers + manufacturers.
+- FastAPI (no Jinja2 — `index.html` served as a static file via `FileResponse`)
+- **curl_cffi** for all HTTP (TLS impersonation, `chrome120`). Replaces httpx because Wayland is behind PerimeterX.
 - selectolax for HTML parsing where retailers don't have JSON APIs
 - **sqlite** (`main.db`) for persistent product cache + wishlist + hidden flags. Single file, additive `ALTER TABLE` migrations on startup (idempotent). See `docs/db.md`.
-- Frontend: one Jinja template + vanilla JS + Tailwind CDN. Sticky header (home/wishlist links + centered search + store-filter icons). Collapsible left sidebar with shipping thresholds. Grid cards with heart (wishlist) and eye (hide) icon toggles on SKU'd cards — both fade in on hover (500ms), heart stays visible when wishlisted.
+- Frontend: `index.html` at repo root, vanilla JS + Tailwind CDN. Fetches `/static/data.json` on load (served dynamically by FastAPI in live mode, as a real file in static mode).
+
+## Modes
+
+**Live mode** (`uv run uvicorn app:app`): FastAPI intercepts `GET /static/data.json` and returns fresh DB data. Write APIs (wishlist, owned, hide, minis) are active. `STATIC_MODE = false`.
+
+**Static mode** (`python -m http.server 8080 --bind 127.0.0.1` or GitHub Pages): `index.html` and `static/` are served as files. `GET /api/ping` fails → `STATIC_MODE = true`. Write APIs silently no-op. Wishlist, owned, hide, minis are display-only. Run `export_static.py` first to generate `static/data.json`.
+
+In static mode: owned/minis show label only (no +/− controls), hide button hidden, heart shows permanently if wishlisted but is not clickable.
 
 ## Layout
 ```
-app.py                  FastAPI app, /search, /manufacturers, /manufacturer/{slug}/{range},
-                        /wishlist (page) + /api/wishlist[...], grouping, in-memory caches, logging
-db.py                   sqlite helpers (products + wishlist + hidden columns), schema init + migrations on startup
+app.py                  FastAPI app — serves index.html, /static/data.json (live DB data),
+                        write APIs (/api/wishlist, /api/hide, /api/owned, /api/minis, /api/hide-range,
+                        /api/range, /api/group), /api/ping
+db.py                   sqlite helpers (products + wishlist + hidden columns), schema init + migrations
+index.html              Frontend (repo root) — fetches /static/data.json, renders manufacturer
+                        sections + range pills + product cards, lightbox, store filters
 retailers/
   __init__.py           IMPERSONATE = "chrome120"
   goblin.py             Shopify /search?q=... HTML + ld+json Product blocks
@@ -36,10 +47,8 @@ manufacturers/
   artizan.py            Artizan Designs — same CMS/parser as NS, list.php?man=<id>. 10 ranges.
   crusader.py           Crusader Miniatures — same CMS/parser, list.php?cat=<id>&sub=<id>. 41 ranges.
   wargamesatlantic.py   Wargames Atlantic — Shopify collections/{handle}/products.json
-  gamesworkshop.py      Games Workshop — queries GW's own Algolia search index directly
-                        (app M5ZIQZNQ2H, index prod-lazarus-product-en-gb, public search-only key).
-                        No WAF bypass needed — Algolia is a separate domain. ~70 ranges grouped
-                        by game system, filtered by category facet.
+  gamesworkshop.py      Games Workshop — Algolia search index (app M5ZIQZNQ2H, public key).
+                        ~70 ranges grouped by game system.
   victrix.py            Victrix — Shopify (collections/{handle}/products.json). 28mm only.
   mantic.py             Mantic — WooCommerce Store API (/wp-json/wc/store/v1/products).
   warlord.py            Warlord Games — Shopify at store.warlordgames.com.
@@ -48,24 +57,28 @@ manufacturers/
 scripts/
   scrape_manufacturers.py  Batch-scrape all manufacturer ranges into the DB. Writes title,
                            image_url, manufacturer_slug, range_slug, manufacturer_url,
-                           description. Never writes prices (price field is used only as a
-                           £15 filter, not persisted). Runs manufacturers in parallel; per-host
-                           throttling via _ThrottledSession.
+                           description. Never writes prices. Runs manufacturers in parallel;
+                           per-host throttling via _ThrottledSession.
                            Run: uv run python scripts/scrape_manufacturers.py
-  fill_minis.py            Iterates non-hidden products without a category, fetches product
-                           pages for the HTML manufacturers (North Star/Artizan/Crusader/Perry/Gripping Beast)
-                           if no description yet, then calls local Llama to infer mini count.
-                           Writes minis (int or NULL) + category ("minis", "book", etc.).
+  scrape_prices.py         Batch-scrape retailer prices for all SKU'd products in the DB.
+                           Updates prices_json + updated_at only. Supports --manufacturer,
+                           --range, --concurrency (default 3) flags.
+                           Run: uv run python scripts/scrape_prices.py
+  fill_minis.py            Iterates non-hidden products without a category, calls local Llama
+                           to infer mini count. Writes minis (int or NULL) + category.
                            Run scrape_manufacturers.py first to populate descriptions.
                            --overwrite redoes all non-hidden rows.
                            Run: uv run python scripts/fill_minis.py [--overwrite]
+  export_static.py         Writes static/data.json from the DB (manufacturers, retailers,
+                           wishlist, owned). Run before serving statically.
+                           Run: uv run python scripts/export_static.py
 docs/                   Deep-dive references (see above).
 static/icons/           Retailer + manufacturer favicons
-templates/index.html    Frontend
-.vscode/tasks.json      "uv run uvicorn app:app" as default build task
+static/data.json        Exported DB snapshot for static mode. Gitignored.
+.vscode/tasks.json      VS Code tasks: dev server, scrape manufacturers, scrape prices,
+                        export static, serve static, fill minis, Llama server.
 .tmp/                   Scratch scripts + HTML/JSON dumps. Gitignored.
 server.txt              Server log (stdout + file). Gitignored.
-.playwright-mcp/        Playwright MCP artefacts. Gitignored.
 main.db                 sqlite product cache + wishlist. Gitignored.
 ```
 
@@ -82,19 +95,11 @@ Each returned item:
 {
   "retailer": str, "retailer_slug": str, "retailer_icon": str,
   "title": str, "url": str,
-  "price": float | None, "rrp": float | None,   # rrp None when not greater than price
+  "price": float | None, "rrp": float | None,
   "in_stock": bool, "image_url": str | None,
-  "sku": str | None,                            # populated by Goblin + Wayland
+  "sku": str | None,
 }
 ```
-
-All retailers hard-capped at **40 items** per search (slice in each module). Per-store request counts to hit that cap:
-- Goblin: 1 (~48/page native)
-- Wayland: 1 (pageSize=40 via GraphQL)
-- Firestorm: 2 (20/page × 2 via `?resultpage=N`)
-- Element: 1 (returns everything in one shot; we slice)
-- Overlord: 1 (Shopify suggest.json, limit=40)
-- NEMC: 1 (~25-35 inline results per query)
 
 ## Manufacturer interface
 ```python
@@ -102,67 +107,52 @@ SLUG: str
 NAME: str
 ICON: str
 RANGES: list[dict]    # each has at least {"slug": str, "name": str, ...}
-                      # optional "group": str — when present, the /manufacturers
-                      # endpoint relays it and the frontend renders pills under
-                      # per-group headers. Used by Games Workshop to bucket
-                      # ~47 ranges (40k / AoS / Skirmish / Middle-earth / Hobby).
+                      # optional "group": str — frontend renders pills under per-group headers.
 async def fetch_range(range_def: dict, client: AsyncSession) -> list[dict]
 ```
 Each returned product:
 ```python
 {"title": str, "sku": str | None, "url": str, "image_url": str | None, "price": float | None,
- "description": str | None}  # raw HTML or plain text; None for manufacturers that don't expose it at listing level
+ "description": str | None}
 ```
-The range_def dict is opaque to the caller — each module reads whatever keys it needs (`man_id` for North Star, `handle` for WA, `path` for GW).
 
-Description sources by manufacturer:
-- WA, Victrix, Warlord, GW (via Goblin): `body_html` from Shopify `products.json`
-- Mantic: `short_description` (falling back to `description`) from WooCommerce store API
-- North Star, Perry, Gripping Beast: individual product page fetch (1-2s delay per product)
-
-## Endpoints (overview)
-- `GET /search?q=...` — runs all retailers in parallel, filters + groups, 15-min in-memory cache. For SKU queries, takes only the first result per retailer. Upserts all groups with at least one SKU into `products` (title/image/prices); for SKU queries with no retailer-provided SKU, uses the query itself as the SKU. Full pipeline + response shape in `docs/internals.md`.
-- `GET /manufacturers` — list of manufacturers and their ranges for the home view. Each range includes `"hidden": bool`.
-- `GET /manufacturer/{slug}/{range_slug}` — products for one range. 15-min cache. `price >= £15`, sorted by SKU. Upserts each SKU'd product into `products` (manufacturer slug + price).
-- `GET /wishlist` — SPA shell, same template as `/`. Frontend switches to wishlist mode and renders cached prices.
-- `GET /api/wishlist` — wishlisted product rows with retailers meta.
-- `GET /api/wishlist/skus` — list of wishlisted SKUs (used to render hearts on cards).
-- `POST /api/wishlist/{sku}` / `DELETE /api/wishlist/{sku}` — toggle wishlist flag.
-- `POST /api/hide/{sku}` / `DELETE /api/hide/{sku}` — hide/unhide a product. Hidden SKUs are filtered from all `/search` and `/manufacturer/{slug}/{range}` responses server-side.
-- `POST /api/hide-range/{man_slug}/{range_slug}` / `DELETE /api/hide-range/{man_slug}/{range_slug}` — hide/unhide a manufacturer range pill. State persists in `hidden_ranges` table; pill is greyed out (opacity-50) in the UI but remains clickable.
-- `POST /api/owned/{sku}` — set owned count for a SKU (`{"count": N}`, N ≥ 0). Persists in `products.owned`. Returned inline with search/manufacturer/wishlist responses as `owned: int`. Cards show a +/− counter bottom-left; hidden on hover when 0, always visible when > 0.
-
-## Grouping (overview)
-Same product across multiple retailers collapses into one card. Bucket by SKU first (item field, or SKU-pattern found in title), else by sorted title tokens. A second pass fuzzy-merges SKU-keyed and token-keyed groups for the same product (Levenshtein ≤ 1 on tokens ≥ 4 chars, ≥ 70% overlap), with a guard against merging sequence-marker variants (II / III / 2 / 3). Algorithm details + edge cases in `docs/internals.md`.
+## Endpoints
+- `GET /` / `/wishlist` / `/owned` — serve `index.html` (FileResponse)
+- `GET /static/data.json` — intercepted by FastAPI, returns `_build_home_data()` fresh from DB
+- `GET /api/ping` — `{"ok": true}`. Used by frontend to detect live vs static mode.
+- `POST /api/wishlist/{sku}` / `DELETE /api/wishlist/{sku}` — toggle wishlist
+- `POST /api/hide/{sku}` / `DELETE /api/hide/{sku}` — hide/unhide product
+- `POST /api/hide-range/{man_slug}/{range_slug}` / `DELETE` — hide/unhide range pill
+- `DELETE /api/range/{man_slug}/{range_slug}` — delete range and all its products
+- `DELETE /api/group/{man_slug}/{group_name}` — delete a pill group
+- `POST /api/owned/{sku}` — set owned count `{"count": N}`
+- `POST /api/minis/{sku}` — set minis count `{"count": N}`
 
 ## "New retailer" workflow
 1. Open in Playwright MCP (`browser_navigate`), find the search form, submit it.
-2. Capture network calls with `browser_network_requests` — look for the actual data endpoint (JSON, GraphQL, or HTML). Replicate the request shape via `browser_network_request` (request-body / request-headers).
-3. Replicate that exact request with curl_cffi. Confirm same response.
-4. Write parser in `retailers/<name>.py`. Include `SLUG`, `NAME`, `ICON`. Test standalone via `.tmp/test_<name>.py`. Try to return `sku` if available — grouping is much better with it.
-5. Fetch the retailer's favicon into `static/icons/<slug>.{ext}`.
-6. Wire into `RETAILERS` list in `app.py`. Add a section to `docs/retailers.md`.
+2. Capture network calls with `browser_network_requests` — look for the actual data endpoint. Replicate via `browser_network_request`.
+3. Replicate with curl_cffi. Confirm same response.
+4. Write parser in `retailers/<name>.py`. Test via `.tmp/test_<name>.py`.
+5. Fetch favicon into `static/icons/<slug>.{ext}`.
+6. Wire into `RETAILERS` list in `app.py`. Add section to `docs/retailers.md`.
 
 ## "New manufacturer" workflow
-1. Inspect the manufacturer site (Playwright MCP if JS-heavy, or curl_cffi if not) to find their range listing pages.
-2. Add a module to `manufacturers/` with `SLUG`, `NAME`, `ICON`, `RANGES`, `async def fetch_range(range_def, client)`.
-3. Each `RANGES` entry needs `slug` + `name` and whatever keys the scraper needs (man_id, handle, path, …). Add `group` if the manufacturer has many ranges that fall naturally into game systems / categories — the frontend will render pills under per-group headers.
-4. Add icon to `static/icons/`. Wire module into `manufacturers/__init__.py`. No further `app.py` changes — the registry is read generically.
-5. If the manufacturer's own site is hostile (WAF, JS challenges), it's fine to source the catalogue from one of the retailers we already scrape (see Games Workshop → Element).
-6. Add a section to `docs/manufacturers.md`.
+1. Inspect the manufacturer site to find range listing pages.
+2. Add module to `manufacturers/` with `SLUG`, `NAME`, `ICON`, `RANGES`, `fetch_range`.
+3. Add `group` to `RANGES` entries if the manufacturer has many ranges that fall into categories.
+4. Add icon to `static/icons/`. Wire into `manufacturers/__init__.py`.
+5. Add section to `docs/manufacturers.md`.
 
 ## Conventions
-- After any significant change (new retailer, new manufacturer, new feature, schema change, behaviour change), update CLAUDE.md and the relevant `docs/` file to reflect the new state.
-- Working directory is already the project root — never `cd` into it (or anywhere else) before running bash commands. Use relative paths.
-- Server does not use `--reload`. Any `.py` change requires a manual server restart. After editing only client-side files (HTML templates, CSS, JS, static assets), tell the user to refresh the page — no restart needed.
-- For ad-hoc Python probes, write a script to `.tmp/<name>.py` then run `uv run python .tmp/<name>.py`. Do NOT use `uv run python -c "…"` with inline code — long inline commands trip permission prompts.
+- **Before committing any change**: update CLAUDE.md and the relevant `docs/` file to reflect the new state. This is mandatory — docs update comes before the commit, not after.
+- **Always commit directly to main** — never create branches or worktrees.
+- Working directory is already the project root — never `cd` before running bash commands.
+- Server does not use `--reload`. Any `.py` change requires a manual server restart. After editing only `index.html` or static assets, tell the user to refresh — no restart needed.
+- For ad-hoc Python probes, write a script to `.tmp/<name>.py` then run `uv run python .tmp/<name>.py`.
 - Single user, localhost only — no auth, no rate limiting, no retries.
-- 15s timeout per request.
-- Errors fail loudly in dev (logged with stacktraces to server.txt), gracefully in UI.
-- Tmp scratch scripts go in `.tmp/` (gitignored). Use them to dump raw HTML/JSON before writing a parser.
-- Playwright MCP is configured at project scope in `.mcp.json` — useful for inspecting JS-rendered pages and network calls.
-- 15-minute in-memory caches for `/search` and `/manufacturer/{slug}/{range}`. Wiped on server restart.
-- After completing any code change, automatically commit to main with a descriptive message. No need to wait for the user to ask.
+- Tmp scratch scripts go in `.tmp/` (gitignored).
+- Playwright MCP is configured at project scope in `.mcp.json`.
+- After completing any code change, automatically commit with a descriptive message.
 
 ## Run
 ```
@@ -170,10 +160,15 @@ uv run uvicorn app:app
 ```
 or hit `Ctrl+Shift+B` in VS Code (default build task).
 
+## Static / GitHub Pages workflow
+```
+uv run python scripts/export_static.py   # writes static/data.json
+python -m http.server 8080 --bind 127.0.0.1   # test locally
+```
+For GitHub Pages: push repo, enable Pages from main branch root.
+
 ## Communication Style
 
-The user is a developer who cares about code quality but doesn't know this specific codebase and doesn't want to think about it. Discuss features and behaviour in plain terms — technical concepts are fine, but don't reference specific files, functions, or code structure unless the user asks. Keep to a high-level.
+The user is a developer who cares about code quality but doesn't know this specific codebase. Discuss features in plain terms. Don't reference specific files, functions, or code structure unless the user asks. Keep to a high level.
 
-When describing how something works, talk about user-visible behaviour and modes ("reveal mode — block fades in all at once", "typing mode — types out character by character"), not implementation names. Don't say "the `typeBlock` function reserves min-height" — say "the typing path makes space appear instantly". Name code things only when the user needs to act on them.
-
-When brainstorming or designing, don't ask about implementation details (specific column names, route paths, function signatures, migration syntax, etc.) — choose sensible defaults based on the spec and existing patterns. Only ask when there's a genuine product decision the user needs to make.
+When brainstorming or designing, don't ask about implementation details — choose sensible defaults. Only ask when there's a genuine product decision the user needs to make.
