@@ -927,32 +927,95 @@ function sortProducts(products) {
       window.open('/?q=' + encodeURIComponent(q), '_blank', 'noopener');
     }
 
-    async function showWishlist() {
+    function showWishlist() {
       manufacturers.innerHTML = '';
       errors.textContent = '';
       renderStoreFilters();
       populateCategorySelect();
-      grid.innerHTML = '<div class="text-sm text-gray-500 px-2">Loading…</div>';
-      try {
-        const r = await fetch('/api/wishlist');
-        const data = await r.json();
-        const items = data.items || [];
-        lastRetailers = data.retailers || [];
-        for (const p of items) {
-          const sku = normSku(p.sku || '');
-          if (sku && p.owned !== undefined) ownedMap.set(sku, p.owned);
-          if (sku && p.minis != null) minisMap.set(sku, p.minis);
-        }
-        if (!items.length) {
-          grid.innerHTML = '<div class="text-sm text-gray-500 px-2">Wishlist is empty. Click a heart on a product to add it.</div>';
-          return;
-        }
-        lastWishlistItems = items;
-        grid.innerHTML = sortProducts(items).map(p => {
-          const ppm = ppmOf(p);
-          return `<div class="card-outer" data-category="${esc(p.category || 'unknown')}" data-ppm="${ppm !== null ? ppm : ''}">${productCard(p, lastRetailers)}</div>`;
-        }).join('');
-        const container = grid;
+      const items = HOME_DATA.wishlist_items || [];
+      lastRetailers = HOME_DATA.retailers || [];
+      for (const p of items) {
+        const sku = normSku(p.sku || '');
+        if (sku && p.owned !== undefined) ownedMap.set(sku, p.owned);
+        if (sku && p.minis != null) minisMap.set(sku, p.minis);
+      }
+      if (!items.length) {
+        grid.innerHTML = '<div class="text-sm text-gray-500 px-2">Wishlist is empty. Click a heart on a product to add it.</div>';
+        return;
+      }
+      lastWishlistItems = items;
+      grid.innerHTML = sortProducts(items).map(p => {
+        const ppm = ppmOf(p);
+        return `<div class="card-outer" data-category="${esc(p.category || 'unknown')}" data-ppm="${ppm !== null ? ppm : ''}">${productCard(p, lastRetailers)}</div>`;
+      }).join('');
+      const container = grid;
+      container.querySelectorAll('.heart-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          toggleWishlist(btn.dataset.sku, btn);
+        });
+      });
+      container.querySelectorAll('.hide-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          const card = btn.closest('.card-wrap');
+          toggleHide(btn.dataset.sku, btn, card);
+        });
+      });
+      bindOwnedCounters(container);
+      bindMinisCounters(container);
+      container.querySelectorAll('.expand-toggle').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const cardEl = btn.closest('.card-wrap');
+          const sec = cardEl.querySelector('.offers-section');
+          if (!sec) return;
+          const opening = sec.style.display === 'none';
+          container.querySelectorAll('.card-wrap').forEach(c => {
+            const s = c.querySelector('.offers-section');
+            const b = c.querySelector('.expand-toggle');
+            if (s) s.style.display = opening ? 'flex' : 'none';
+            if (b) {
+              b.querySelector('path').setAttribute('d', opening ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6');
+              b.setAttribute('aria-label', opening ? 'Collapse' : 'Expand');
+            }
+          });
+        });
+      });
+      bindCardClicks(container);
+      applyStoreFilterToDOM();
+    }
+
+    function showOwned() {
+      manufacturers.innerHTML = '';
+      errors.textContent = '';
+      renderStoreFilters();
+      populateCategorySelect();
+      const items = HOME_DATA.owned_items || [];
+      lastRetailers = HOME_DATA.retailers || [];
+      const manufacturersMeta = HOME_DATA.manufacturers_meta || {};
+      for (const p of items) {
+        const sku = normSku(p.sku || '');
+        if (sku && p.owned !== undefined) ownedMap.set(sku, p.owned);
+        if (sku && p.minis != null) minisMap.set(sku, p.minis);
+      }
+      if (!items.length) {
+        grid.innerHTML = '<div class="text-sm text-gray-500 px-2">No owned products yet. Use the +/− counter on a product card to mark items as owned.</div>';
+        return;
+      }
+
+      lastOwnedItems = items;
+      const manOrder = [];
+      const byMan = new Map();
+      for (const p of sortProducts(items)) {
+        const slug = p.manufacturer_slug || '';
+        if (!byMan.has(slug)) { byMan.set(slug, []); manOrder.push(slug); }
+        byMan.get(slug).push(p);
+      }
+
+      const bindContainer = (container) => {
         container.querySelectorAll('.heart-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -988,129 +1051,51 @@ function sortProducts(products) {
             });
           });
         });
-        bindCardClicks(container);
-        applyStoreFilterToDOM();
-      } catch (err) {
-        grid.innerHTML = `<div class="text-sm text-red-700 px-2">${esc(String(err))}</div>`;
-      }
-    }
-
-    async function showOwned() {
-      manufacturers.innerHTML = '';
-      errors.textContent = '';
-      renderStoreFilters();
-      populateCategorySelect();
-      grid.innerHTML = '<div class="text-sm text-gray-500 px-2">Loading…</div>';
-      try {
-        const r = await fetch('/api/owned');
-        const data = await r.json();
-        const items = data.items || [];
-        lastRetailers = data.retailers || [];
-        const manufacturersMeta = data.manufacturers || {};
-        for (const p of items) {
-          const sku = normSku(p.sku || '');
-          if (sku && p.owned !== undefined) ownedMap.set(sku, p.owned);
-          if (sku && p.minis != null) minisMap.set(sku, p.minis);
-        }
-        if (!items.length) {
-          grid.innerHTML = '<div class="text-sm text-gray-500 px-2">No owned products yet. Use the +/− counter on a product card to mark items as owned.</div>';
-          return;
-        }
-
-        // Group by manufacturer_slug, preserving order
-        lastOwnedItems = items;
-        const manOrder = [];
-        const byMan = new Map();
-        for (const p of sortProducts(items)) {
-          const slug = p.manufacturer_slug || '';
-          if (!byMan.has(slug)) { byMan.set(slug, []); manOrder.push(slug); }
-          byMan.get(slug).push(p);
-        }
-
-        const bindContainer = (container) => {
-          container.querySelectorAll('.heart-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              toggleWishlist(btn.dataset.sku, btn);
-            });
+        container.querySelectorAll('.card-wrap').forEach(cardEl => {
+          cardEl.addEventListener('click', (e) => {
+            if (e.target.closest('.heart-btn, .hide-btn, .owned-counter, .minis-counter, .expand-toggle')) return;
+            const sku = cardEl.dataset.sku;
+            if (!sku) return;
+            const state = cardEl.dataset.priceState;
+            if (state === 'loading') return;
+            if (state === 'loaded') {
+              openLightbox(container, cardEl);
+              return;
+            }
+            enqueueCardPriceFetch(cardEl, sku);
           });
-          container.querySelectorAll('.hide-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              const card = btn.closest('.card-wrap');
-              toggleHide(btn.dataset.sku, btn, card);
-            });
+          cardEl.addEventListener('auxclick', (e) => {
+            if (e.button !== 1) return;
+            if (e.target.closest('.heart-btn, .hide-btn, .owned-counter, .minis-counter, .expand-toggle')) return;
+            const manUrl = cardEl.dataset.manUrl;
+            if (manUrl) { e.preventDefault(); window.open(manUrl, '_blank', 'noopener'); }
           });
-          bindOwnedCounters(container);
-        bindMinisCounters(container);
-          container.querySelectorAll('.expand-toggle').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-              e.stopPropagation();
-              const cardEl = btn.closest('.card-wrap');
-              const sec = cardEl.querySelector('.offers-section');
-              if (!sec) return;
-              const opening = sec.style.display === 'none';
-              container.querySelectorAll('.card-wrap').forEach(c => {
-                const s = c.querySelector('.offers-section');
-                const b = c.querySelector('.expand-toggle');
-                if (s) s.style.display = opening ? 'flex' : 'none';
-                if (b) {
-                  b.querySelector('path').setAttribute('d', opening ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6');
-                  b.setAttribute('aria-label', opening ? 'Collapse' : 'Expand');
-                }
-              });
-            });
-          });
-          container.querySelectorAll('.card-wrap').forEach(cardEl => {
-            cardEl.addEventListener('click', (e) => {
-              if (e.target.closest('.heart-btn, .hide-btn, .owned-counter, .minis-counter, .expand-toggle')) return;
-              const sku = cardEl.dataset.sku;
-              if (!sku) return;
-              const state = cardEl.dataset.priceState;
-              if (state === 'loading') return;
-              if (state === 'loaded') {
-                openLightbox(container, cardEl);
-                return;
-              }
-              enqueueCardPriceFetch(cardEl, sku);
-            });
-            cardEl.addEventListener('auxclick', (e) => {
-              if (e.button !== 1) return;
-              if (e.target.closest('.heart-btn, .hide-btn, .owned-counter, .minis-counter, .expand-toggle')) return;
-              const manUrl = cardEl.dataset.manUrl;
-              if (manUrl) { e.preventDefault(); window.open(manUrl, '_blank', 'noopener'); }
-            });
-          });
-        };
+        });
+      };
 
-        manufacturers.innerHTML = manOrder.map(slug => {
-          const manInfo = manufacturersMeta[slug];
-          const manItems = byMan.get(slug);
-          const headerHtml = manInfo
-            ? `<div class="flex items-center gap-2 mb-3">
-                <img src="${esc(manInfo.icon)}" class="w-5 h-5 object-contain" alt="" />
-                <h2 class="font-semibold">${esc(manInfo.name)}</h2>
-               </div>`
-            : slug ? `<div class="mb-3"><h2 class="font-semibold">${esc(slug)}</h2></div>` : '';
-          const cardsHtml = manItems.map(p => {
-            const ppm = ppmOf(p);
-            return `<div class="card-outer" data-category="${esc(p.category || 'unknown')}" data-ppm="${ppm !== null ? ppm : ''}">${productCard(p, lastRetailers)}</div>`;
-          }).join('');
-          return `<section class="border rounded-lg bg-white overflow-hidden">
-            <div class="p-4 pb-0">
-              ${headerHtml}
-            </div>
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 p-4 pt-0">${cardsHtml}</div>
-          </section>`;
+      manufacturers.innerHTML = manOrder.map(slug => {
+        const manInfo = manufacturersMeta[slug];
+        const manItems = byMan.get(slug);
+        const headerHtml = manInfo
+          ? `<div class="flex items-center gap-2 mb-3">
+              <img src="${esc(manInfo.icon)}" class="w-5 h-5 object-contain" alt="" />
+              <h2 class="font-semibold">${esc(manInfo.name)}</h2>
+             </div>`
+          : slug ? `<div class="mb-3"><h2 class="font-semibold">${esc(slug)}</h2></div>` : '';
+        const cardsHtml = manItems.map(p => {
+          const ppm = ppmOf(p);
+          return `<div class="card-outer" data-category="${esc(p.category || 'unknown')}" data-ppm="${ppm !== null ? ppm : ''}">${productCard(p, lastRetailers)}</div>`;
         }).join('');
-        grid.innerHTML = '';
-        bindContainer(manufacturers);
-        applyStoreFilterToDOM();
-      } catch (err) {
-        grid.innerHTML = `<div class="text-sm text-red-700 px-2">${esc(String(err))}</div>`;
-      }
+        return `<section class="border rounded-lg bg-white overflow-hidden">
+          <div class="p-4 pb-0">
+            ${headerHtml}
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-2 p-4 pt-0">${cardsHtml}</div>
+        </section>`;
+      }).join('');
+      grid.innerHTML = '';
+      bindContainer(manufacturers);
+      applyStoreFilterToDOM();
     }
 
     function populateCategorySelect() {

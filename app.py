@@ -460,15 +460,6 @@ async def manufacturer_range(man_slug: str, range_slug: str):
     return JSONResponse(payload)
 
 
-@app.get("/api/wishlist")
-async def wishlist_list():
-    items = db.wishlist_products()
-    retailers_meta = [
-        {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
-    ]
-    return JSONResponse({"items": items, "retailers": retailers_meta})
-
-
 @app.get("/api/wishlist/skus")
 async def wishlist_sku_list():
     return JSONResponse({"skus": db.wishlist_skus()})
@@ -555,42 +546,7 @@ async def wayland_cookies(request: Request):
     return JSONResponse({"ok": True})
 
 
-@app.get("/api/owned")
-async def owned_list():
-    items = db.owned_products()
-    retailers_meta = [
-        {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS
-    ]
-    manufacturers_meta = {
-        m.SLUG: {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in MANUFACTURERS
-    }
-    return JSONResponse({"items": items, "retailers": retailers_meta, "manufacturers": manufacturers_meta})
-
-
-def _shell_home_data() -> dict:
-    """Manufacturers + retailers meta only — no products_by_range. Used by wishlist/owned pages."""
-    hidden_ranges = db.get_hidden_ranges()
-    mfrs = db.manufacturers_with_ranges()
-    for m in mfrs:
-        for r in m["ranges"]:
-            r["hidden"] = (m["slug"], r["slug"]) in hidden_ranges
-    retailers_meta = [{"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS]
-    wishlist_skus = db.wishlist_skus()
-    return {"manufacturers": mfrs, "retailers": retailers_meta, "wishlist_skus": wishlist_skus}
-
-
-@app.get("/owned", response_class=HTMLResponse)
-async def owned_page(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"home_data": _shell_home_data()})
-
-
-@app.get("/wishlist", response_class=HTMLResponse)
-async def wishlist_page(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"home_data": _shell_home_data()})
-
-
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request):
+def _build_home_data() -> dict:
     hidden_ranges = db.get_hidden_ranges()
     mfrs = db.manufacturers_with_ranges()
     for m in mfrs:
@@ -599,6 +555,9 @@ async def index(request: Request):
     hidden_skus = set(db.hidden_skus())
     owned = db.owned_counts()
     retailers_meta = [{"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS]
+    manufacturers_meta = {
+        m.SLUG: {"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in MANUFACTURERS
+    }
     for m in mfrs:
         products_by_range = {}
         for r in m["ranges"]:
@@ -609,10 +568,30 @@ async def index(request: Request):
                 p["owned"] = owned.get(db.norm_sku(p.get("sku") or ""), 0)
             products_by_range[r["slug"]] = products
         m["products_by_range"] = products_by_range
-    wishlist_skus = db.wishlist_skus()
-    home_data = {
+    wishlist_items = db.wishlist_products()
+    for p in wishlist_items:
+        p["owned"] = owned.get(db.norm_sku(p.get("sku") or ""), p.get("owned", 0))
+    owned_items = db.owned_products()
+    return {
         "manufacturers": mfrs,
+        "manufacturers_meta": manufacturers_meta,
         "retailers": retailers_meta,
-        "wishlist_skus": wishlist_skus,
+        "wishlist_skus": [p["sku"] for p in wishlist_items if p.get("sku")],
+        "wishlist_items": wishlist_items,
+        "owned_items": owned_items,
     }
-    return templates.TemplateResponse(request, "index.html", {"home_data": home_data})
+
+
+@app.get("/owned", response_class=HTMLResponse)
+async def owned_page(request: Request):
+    return templates.TemplateResponse(request, "index.html", {"home_data": _build_home_data()})
+
+
+@app.get("/wishlist", response_class=HTMLResponse)
+async def wishlist_page(request: Request):
+    return templates.TemplateResponse(request, "index.html", {"home_data": _build_home_data()})
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    return templates.TemplateResponse(request, "index.html", {"home_data": _build_home_data()})
