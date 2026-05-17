@@ -1837,9 +1837,11 @@ function sortProducts(products) {
 
       lb.addEventListener('click', (e) => {
         if (lbOverlays.contains(e.target) && e.target !== lbOverlays) return;
-        if (lbImg.contains(e.target)) {
-          const half = lbImg.getBoundingClientRect().left + lbImg.offsetWidth / 2;
-          lbShow(e.clientX < half ? lbIdx - 1 : lbIdx + 1);
+        const imgRect = lbImg.getBoundingClientRect();
+        const overImage = e.clientX >= imgRect.left && e.clientX <= imgRect.right &&
+                          e.clientY >= imgRect.top  && e.clientY <= imgRect.bottom;
+        if (overImage) {
+          lbShow(e.clientX < imgRect.left + imgRect.width / 2 ? lbIdx - 1 : lbIdx + 1);
           return;
         }
         lb.classList.add('hidden');
