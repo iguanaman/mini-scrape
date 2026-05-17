@@ -92,6 +92,11 @@ def _build_home_data() -> dict:
     }
 
 
+@app.get("/api/ping")
+async def ping():
+    return JSONResponse({"ok": True})
+
+
 @app.post("/api/wishlist/{sku}")
 async def wishlist_add(sku: str):
     db.add_wishlist(sku)
