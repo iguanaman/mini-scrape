@@ -602,7 +602,6 @@ function sortProducts(products) {
     function applyCategoryFilter() { applyFilters(); }
 
     function loadRange(manSlug, rangeSlug, container) {
-      try {
         const man = (HOME_DATA.manufacturers || []).find(m => m.slug === manSlug);
         const products = (man && man.products_by_range && man.products_by_range[rangeSlug]) || [];
         if (!products.length) {
