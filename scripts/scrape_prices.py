@@ -26,6 +26,7 @@ from curl_cffi.requests import AsyncSession
 from tqdm import tqdm
 from retailers import IMPERSONATE
 from retailers import goblin, wayland, firestorm, element, overlord, nemc
+from retailers.wayland import WaylandBlockedError
 import db
 
 RETAILERS = [goblin, wayland, firestorm, element, overlord, nemc]
@@ -156,6 +157,10 @@ async def main(args: argparse.Namespace) -> None:
                     elif cheapest > old_cheapest:
                         status += f"  ↑ (was £{old_cheapest:.2f})"
                 log.info("%-20s %s", row["sku"], status)
+            except WaylandBlockedError:
+                tqdm.write("\nWayland is blocking requests. Update cookies then press Enter to continue...")
+                tqdm.write("Run in another terminal: uv run python scripts/capture_wayland_cookies.py --paste")
+                input()
             except Exception:
                 log.exception("Failed for SKU %s", row["sku"])
             if i < len(rows) - 1:
