@@ -549,7 +549,7 @@ def owned_products() -> list[dict]:
     with _conn() as c:
         rows = c.execute(
             """SELECT sku, title, image_url, manufacturer_slug, manufacturer_url,
-                      prices_json, minis, owned, updated_at
+                      prices_json, minis, owned, category, updated_at
                FROM products
                WHERE owned > 0
                ORDER BY manufacturer_slug NULLS LAST, sku"""
@@ -571,6 +571,7 @@ def owned_products() -> list[dict]:
             "prices": prices,
             "minis": r["minis"],
             "owned": r["owned"],
+            "category": r["category"],
             "updated_at": r["updated_at"],
         })
     return out
@@ -580,7 +581,7 @@ def wishlist_products() -> list[dict]:
     with _conn() as c:
         rows = c.execute(
             """SELECT sku, title, image_url, manufacturer_slug, manufacturer_url,
-                      prices_json, minis, owned, updated_at, wishlisted_at
+                      prices_json, minis, owned, category, updated_at, wishlisted_at
                FROM products
                WHERE wishlisted_at IS NOT NULL
                ORDER BY wishlisted_at DESC"""
@@ -602,6 +603,7 @@ def wishlist_products() -> list[dict]:
             "prices": prices,
             "minis": r["minis"],
             "owned": r["owned"],
+            "category": r["category"],
             "updated_at": r["updated_at"],
             "added_at": r["wishlisted_at"],
         })

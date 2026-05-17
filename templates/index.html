@@ -161,7 +161,7 @@
     const sortSelect = document.getElementById('sort-select');
     const filterExpensiveSel = document.getElementById('filter-expensive');
 
-    let selectedStore = null;
+    let selectedStores = new Set();
     let selectedCategory = 'minis';
     let selectedSort = 'price_per_mini';
     let filterExpensive = 4;
@@ -538,18 +538,18 @@
         onclick="event.preventDefault();event.stopPropagation();showDeletePriceModal(this)"
         title="Remove this store's price">×</button>` : '';
       if (!o.found) {
-        return `<div class="flex items-center justify-between gap-2 py-0.5 px-2 text-sm text-gray-400">
+        return `<div class="offer-row flex items-center justify-between gap-2 py-0.5 px-2 text-sm text-gray-400" data-slug="${esc(o.retailer_slug)}">
           ${inner}<span class="italic">Not found</span></div>`;
       }
       if (!o.in_stock) {
-        return `<div class="offer-row flex items-center gap-2 py-0.5 px-2 text-sm text-gray-500">
+        return `<div class="offer-row flex items-center gap-2 py-0.5 px-2 text-sm text-gray-500" data-slug="${esc(o.retailer_slug)}">
           <a href="${esc(o.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"
             class="flex items-center justify-between gap-2 flex-1 hover:bg-gray-50 rounded">
             ${inner}<span class="italic">No stock</span>
           </a>${deleteBtn}</div>`;
       }
       const priceClass = dim ? 'font-medium text-gray-400' : 'font-medium';
-      return `<div class="offer-row flex items-center gap-2 py-0.5 px-2 text-sm">
+      return `<div class="offer-row flex items-center gap-2 py-0.5 px-2 text-sm" data-slug="${esc(o.retailer_slug)}">
         <a href="${esc(o.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()"
           class="flex items-center justify-between gap-2 flex-1 hover:bg-gray-50 rounded">
           ${inner}<span class="${priceClass}">${fmt(o.price)}</span>
@@ -600,24 +600,17 @@
 
     function card(g, allRetailers) {
       const rows = buildOffers(g, allRetailers);
-      // When a store is selected, dim rows for other retailers, and gray out
-      // the whole card if the selected store has no in-stock offer for it.
-      const sel = selectedStore;
-      const selectedRow = sel ? rows.find(r => r.retailer_slug === sel) : null;
-      const cardDimmed = !!sel && !(selectedRow && selectedRow.found && selectedRow.in_stock);
-      // Show top 3 retailers per card, or all when expanded. If a store is selected, ensure its row is included.
+      const sel = selectedStores;
+      // When stores are selected, only show rows for those stores.
+      const filteredRows = sel.size ? rows.filter(r => sel.has(r.retailer_slug)) : rows;
       let shown;
       if (cardsExpanded) {
-        shown = rows;
+        shown = filteredRows;
       } else {
-        shown = rows.slice(0, 3);
-        if (sel && !shown.some(r => r.retailer_slug === sel)) {
-          const selRow = rows.find(r => r.retailer_slug === sel);
-          if (selRow) shown = [...shown.slice(0, 2), selRow];
-        }
+        shown = filteredRows.slice(0, 3);
       }
-      const offers = shown.map(r => offerRow(r, !!sel && r.retailer_slug !== sel, g.skus && g.skus[0])).join('');
-      const canExpand = rows.length > 3;
+      const offers = shown.map(r => offerRow(r, false, g.skus && g.skus[0])).join('');
+      const canExpand = filteredRows.length > 3;
       const toggleBar = canExpand ? `
         <button type="button" class="expand-toggle w-full text-gray-500 hover:bg-gray-50 hover:text-gray-800 py-0 flex items-center justify-center"
           aria-label="${cardsExpanded ? 'Collapse' : 'Expand'}">
@@ -656,7 +649,7 @@
       const firstMinisCount = firstSku ? (minisMap.get(normSku(firstSku)) ?? (g.minis || 0)) : 0;
       const minisBtn = firstSku ? minisCounter(firstSku, firstMinisCount, hasStock ? g.cheapest_price : null) : '';
       return `
-        <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col ${cardDimmed ? 'opacity-40 grayscale' : ''}"
+        <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col"
              ${g.image_url ? `data-lb-img="${esc(g.image_url)}" data-lb-title="${esc(g.title)}"` : ''}>
           <div class="relative" style="height:240px">
             ${imgWrap}
@@ -737,7 +730,8 @@
       let offersHtml = '';
       let toggleBar = '';
       if (hasCachedPrices) {
-        const offers = pricesJsonToOffers(p.prices, allRetailers);
+        let offers = pricesJsonToOffers(p.prices, allRetailers);
+        if (selectedStores.size) offers = offers.filter(o => selectedStores.has(o.retailer_slug));
         offers.sort((a, b) => {
           const rank = o => o.in_stock ? 0 : 1;
           if (rank(a) !== rank(b)) return rank(a) - rank(b);
@@ -776,7 +770,12 @@
         </div>`;
     }
 
-    function sortProducts(products) {
+    function ppmOf(p) {
+      const prices = Object.values(p.prices || {}).map(e => e && typeof e === 'object' ? e.price : e).filter(v => typeof v === 'number');
+      const minis = (p.sku && minisMap.get(normSku(p.sku))) ?? p.minis;
+      return prices.length && minis ? Math.min(...prices) / minis : null;
+    }
+function sortProducts(products) {
       let copy = [...products];
       if (selectedSort === 'name') {
         copy.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
@@ -831,12 +830,12 @@
         pill.classList.remove('category-dim');
       });
       // Cards: hide if category doesn't match or price/mini exceeds threshold
-      manufacturers.querySelectorAll('.card-outer').forEach(outer => {
+      [manufacturers, grid].forEach(root => root.querySelectorAll('.card-outer').forEach(outer => {
         const catHide = cat !== 'all' && outer.dataset.category !== cat;
         const ppm = outer.dataset.ppm !== '' ? parseFloat(outer.dataset.ppm) : null;
         const expHide = filterExpensive !== null && ppm !== null && ppm > filterExpensive;
         outer.classList.toggle('hidden', catHide || expHide);
-      });
+      }));
       // Range containers: hide if open but all cards are filtered out
       manufacturers.querySelectorAll('.range-products').forEach(container => {
         if (container.hidden && !container.dataset.filterHidden) return; // already closed by user, leave it
@@ -915,6 +914,7 @@
         });
         bindCardClicks(container);
         applyCategoryFilter();
+        applyStoreFilterToDOM();
       } catch (err) {
         container.innerHTML = `<div class="text-sm text-red-700 px-2">${esc(String(err))}</div>`;
       }
@@ -927,8 +927,8 @@
     async function showWishlist() {
       manufacturers.innerHTML = '';
       errors.textContent = '';
-      storeFilters.innerHTML = '';
-      selectedStore = null;
+      renderStoreFilters();
+      populateCategorySelect();
       grid.innerHTML = '<div class="text-sm text-gray-500 px-2">Loading…</div>';
       try {
         const r = await fetch('/api/wishlist');
@@ -945,7 +945,10 @@
           return;
         }
         lastWishlistItems = items;
-        grid.innerHTML = sortProducts(items).map(p => productCard(p, lastRetailers)).join('');
+        grid.innerHTML = sortProducts(items).map(p => {
+          const ppm = ppmOf(p);
+          return `<div class="card-outer" data-category="${esc(p.category || 'unknown')}" data-ppm="${ppm !== null ? ppm : ''}">${productCard(p, lastRetailers)}</div>`;
+        }).join('');
         const container = grid;
         container.querySelectorAll('.heart-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
@@ -971,12 +974,19 @@
             const sec = cardEl.querySelector('.offers-section');
             if (!sec) return;
             const opening = sec.style.display === 'none';
-            sec.style.display = opening ? 'flex' : 'none';
-            btn.querySelector('path').setAttribute('d', opening ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6');
-            btn.setAttribute('aria-label', opening ? 'Collapse' : 'Expand');
+            container.querySelectorAll('.card-wrap').forEach(c => {
+              const s = c.querySelector('.offers-section');
+              const b = c.querySelector('.expand-toggle');
+              if (s) s.style.display = opening ? 'flex' : 'none';
+              if (b) {
+                b.querySelector('path').setAttribute('d', opening ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6');
+                b.setAttribute('aria-label', opening ? 'Collapse' : 'Expand');
+              }
+            });
           });
         });
         bindCardClicks(container);
+        applyStoreFilterToDOM();
       } catch (err) {
         grid.innerHTML = `<div class="text-sm text-red-700 px-2">${esc(String(err))}</div>`;
       }
@@ -985,8 +995,8 @@
     async function showOwned() {
       manufacturers.innerHTML = '';
       errors.textContent = '';
-      storeFilters.innerHTML = '';
-      selectedStore = null;
+      renderStoreFilters();
+      populateCategorySelect();
       grid.innerHTML = '<div class="text-sm text-gray-500 px-2">Loading…</div>';
       try {
         const r = await fetch('/api/owned');
@@ -1039,9 +1049,15 @@
               const sec = cardEl.querySelector('.offers-section');
               if (!sec) return;
               const opening = sec.style.display === 'none';
-              sec.style.display = opening ? 'flex' : 'none';
-              btn.querySelector('path').setAttribute('d', opening ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6');
-              btn.setAttribute('aria-label', opening ? 'Collapse' : 'Expand');
+              container.querySelectorAll('.card-wrap').forEach(c => {
+                const s = c.querySelector('.offers-section');
+                const b = c.querySelector('.expand-toggle');
+                if (s) s.style.display = opening ? 'flex' : 'none';
+                if (b) {
+                  b.querySelector('path').setAttribute('d', opening ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6');
+                  b.setAttribute('aria-label', opening ? 'Collapse' : 'Expand');
+                }
+              });
             });
           });
           container.querySelectorAll('.card-wrap').forEach(cardEl => {
@@ -1075,7 +1091,10 @@
                 <h2 class="font-semibold">${esc(manInfo.name)}</h2>
                </div>`
             : slug ? `<div class="mb-3"><h2 class="font-semibold">${esc(slug)}</h2></div>` : '';
-          const cardsHtml = manItems.map(p => productCard(p, lastRetailers)).join('');
+          const cardsHtml = manItems.map(p => {
+            const ppm = ppmOf(p);
+            return `<div class="card-outer" data-category="${esc(p.category || 'unknown')}" data-ppm="${ppm !== null ? ppm : ''}">${productCard(p, lastRetailers)}</div>`;
+          }).join('');
           return `<section class="border rounded-lg bg-white overflow-hidden">
             <div class="p-4 pb-0">
               ${headerHtml}
@@ -1085,31 +1104,37 @@
         }).join('');
         grid.innerHTML = '';
         bindContainer(manufacturers);
+        applyStoreFilterToDOM();
       } catch (err) {
         grid.innerHTML = `<div class="text-sm text-red-700 px-2">${esc(String(err))}</div>`;
+      }
+    }
+
+    function populateCategorySelect() {
+      if (categorySelect.options.length) return; // already populated
+      const mans = HOME_DATA.manufacturers || [];
+      const catSet = new Set();
+      for (const m of mans) for (const r of (m.ranges || [])) for (const c of (r.categories || [])) catSet.add(c);
+      catSet.delete('unknown');
+      const cats = [...catSet].sort();
+      categorySelect.innerHTML = `<option value="all">All</option>${cats.map(c => `<option value="${esc(c)}"${c === selectedCategory ? ' selected' : ''}>${esc(c.charAt(0).toUpperCase() + c.slice(1))}</option>`).join('')}<option value="unknown"${selectedCategory === 'unknown' ? ' selected' : ''}>Unknown</option>`;
+      if (!cats.includes(selectedCategory) && selectedCategory !== 'all' && selectedCategory !== 'unknown') {
+        selectedCategory = 'minis';
+        categorySelect.value = 'minis';
       }
     }
 
     async function showManufacturers() {
       grid.innerHTML = '';
       errors.textContent = '';
-      storeFilters.innerHTML = '';
-      selectedStore = null;
+      renderStoreFilters();
       lastGroups = [];
       lastWishlistItems = null;
       lastOwnedItems = null;
       lastRetailers = HOME_DATA.retailers || [];
       try {
+        populateCategorySelect();
         const mans = HOME_DATA.manufacturers || [];
-        const catSet = new Set();
-        for (const m of mans) for (const r of (m.ranges || [])) for (const c of (r.categories || [])) catSet.add(c);
-        catSet.delete('unknown');
-        const cats = [...catSet].sort();
-        categorySelect.innerHTML = `<option value="all">All</option>${cats.map(c => `<option value="${esc(c)}"${c === selectedCategory ? ' selected' : ''}>${esc(c.charAt(0).toUpperCase() + c.slice(1))}</option>`).join('')}<option value="unknown"${selectedCategory === 'unknown' ? ' selected' : ''}>Unknown</option>`;
-        if (!cats.includes(selectedCategory) && selectedCategory !== 'all' && selectedCategory !== 'unknown') {
-          selectedCategory = 'minis';
-          categorySelect.value = 'minis';
-        }
         const pill = (manSlug, r) => {
           const empty = !r.hidden && !(r.categories || []).length;
           return `<span class="range-pill inline-flex items-center border rounded-full text-sm overflow-hidden${r.hidden || empty ? ' opacity-50' : ''}" data-hidden="${r.hidden ? '1' : '0'}" data-categories="${esc((r.categories || []).join(','))}" data-min-ppm="${r.min_ppm != null ? r.min_ppm : ''}">
@@ -1276,31 +1301,56 @@
     }
 
     function renderStoreFilters() {
-      storeFilters.innerHTML = lastRetailers.map(r => `
+      const retailers = HOME_DATA.retailers || [];
+      storeFilters.innerHTML = retailers.map(r => `
         <button type="button" data-slug="${esc(r.slug)}" title="${esc(r.name)}"
-          class="store-filter w-8 h-8 rounded p-0.5 border ${selectedStore === r.slug ? 'border-black bg-white ring-2 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
+          class="store-filter w-8 h-8 rounded p-0.5 border ${selectedStores.has(r.slug) ? 'border-black bg-white ring-2 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
           <img src="${esc(r.icon)}" class="w-full h-full object-contain" alt="${esc(r.name)}" />
         </button>`).join('');
       storeFilters.querySelectorAll('.store-filter').forEach(btn => {
         btn.addEventListener('click', () => {
           const slug = btn.dataset.slug;
-          selectedStore = (selectedStore === slug) ? null : slug;
+          if (selectedStores.has(slug)) selectedStores.delete(slug);
+          else selectedStores.add(slug);
           renderStoreFilters();
-          renderGrid();
+          if (lastGroups.length) {
+            renderGrid();
+          } else {
+            applyStoreFilterToDOM();
+          }
+        });
+      });
+    }
+
+    // For wishlist/owned/manufacturer pages: filter card-outer visibility and offer rows in the DOM.
+    function applyStoreFilterToDOM() {
+      const sel = selectedStores;
+      [grid, manufacturers].forEach(container => {
+        container.querySelectorAll('.card-outer').forEach(outer => {
+          const offerRows = outer.querySelectorAll('.offer-row');
+          if (!sel.size) {
+            outer.style.display = '';
+            offerRows.forEach(row => { row.style.display = ''; });
+            return;
+          }
+          const hasMatch = [...offerRows].some(row => sel.has(row.dataset.slug));
+          outer.style.display = hasMatch ? '' : 'none';
+          offerRows.forEach(row => {
+            row.style.display = sel.has(row.dataset.slug) ? '' : 'none';
+          });
         });
       });
     }
 
     function renderGrid() {
-      const sel = selectedStore;
-      const groupHasStock = (g) => {
-        if (!sel) return true;
-        const o = (g.offers || []).find(o => o.retailer_slug === sel);
-        return !!(o && o.in_stock);
+      const sel = selectedStores;
+      const groupHasPrice = (g) => {
+        if (!sel.size) return true;
+        return (g.offers || []).some(o => sel.has(o.retailer_slug) && o.price != null);
       };
-      const sorted = [...lastGroups].sort((a, b) => {
-        const aOk = groupHasStock(a) ? 0 : 1;
-        const bOk = groupHasStock(b) ? 0 : 1;
+      const sorted = [...lastGroups].filter(groupHasPrice).sort((a, b) => {
+        const aOk = (a.offers || []).some(o => sel.size === 0 || (sel.has(o.retailer_slug) && o.in_stock)) ? 0 : 1;
+        const bOk = (b.offers || []).some(o => sel.size === 0 || (sel.has(o.retailer_slug) && o.in_stock)) ? 0 : 1;
         return aOk - bOk;
       });
       grid.innerHTML = sorted.length
@@ -1419,9 +1469,54 @@
       selectedSort = sortSelect.value;
       // Re-sort search grid if visible
       if (lastGroups.length) renderGrid();
-      // Re-render wishlist/owned if active
-      if (lastWishlistItems) { showWishlist(); return; }
-      if (lastOwnedItems) { showOwned(); return; }
+      // Re-sort wishlist/owned by moving card-outer elements (no refetch)
+      const buildProductMap = items => {
+        const m = new Map();
+        for (const p of items) if (p.sku) m.set(normSku(p.sku), p);
+        return m;
+      };
+      const resortGrid = (gridEl, productMap) => {
+        const outers = Array.from(gridEl.querySelectorAll(':scope > .card-outer'));
+        if (!outers.length) return;
+        const skuOf = el => normSku(el.querySelector('.card-wrap')?.dataset?.sku || '');
+        const titleOf = el => el.querySelector('.font-medium')?.textContent || '';
+        const productOf = el => productMap.get(skuOf(el));
+        const cheapestOf = el => {
+          const p = productOf(el);
+          if (!p) return null;
+          const prices = Object.values(p.prices || {}).map(e => e && typeof e === 'object' ? e.price : e).filter(v => typeof v === 'number');
+          return prices.length ? Math.min(...prices) : null;
+        };
+        const minisOf = el => { const sku = skuOf(el); return (sku && minisMap.get(sku)) || productOf(el)?.minis || null; };
+        if (selectedSort === 'name') {
+          outers.sort((a, b) => titleOf(a).localeCompare(titleOf(b)));
+        } else if (selectedSort === 'price_per_mini') {
+          outers.sort((a, b) => {
+            const pa = cheapestOf(a), pb = cheapestOf(b), ma = minisOf(a), mb = minisOf(b);
+            const ppma = (pa !== null && ma) ? pa / ma : null, ppmb = (pb !== null && mb) ? pb / mb : null;
+            if (ppma !== null && ppmb !== null) return ppma - ppmb;
+            if (ppma !== null) return -1; if (ppmb !== null) return 1;
+            if (pa !== null && pb !== null) return pa - pb;
+            if (pa !== null) return -1; if (pb !== null) return 1;
+            return 0;
+          });
+        } else if (selectedSort === 'price') {
+          outers.sort((a, b) => { const pa = cheapestOf(a), pb = cheapestOf(b); if (pa !== null && pb !== null) return pa - pb; if (pa !== null) return -1; if (pb !== null) return 1; return 0; });
+        } else {
+          outers.sort((a, b) => skuOf(a).localeCompare(skuOf(b)));
+        }
+        outers.forEach(el => gridEl.appendChild(el));
+      };
+      if (lastWishlistItems) {
+        const pm = buildProductMap(lastWishlistItems);
+        resortGrid(grid, pm);
+        return;
+      }
+      if (lastOwnedItems) {
+        const pm = buildProductMap(lastOwnedItems);
+        manufacturers.querySelectorAll('.grid').forEach(gridEl => resortGrid(gridEl, pm));
+        return;
+      }
       // Re-sort manufacturer range grids by moving card-outer elements
       const skuProductMap = new Map();
       for (const man of HOME_DATA.manufacturers || []) {

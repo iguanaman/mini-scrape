@@ -567,17 +567,26 @@ async def owned_list():
     return JSONResponse({"items": items, "retailers": retailers_meta, "manufacturers": manufacturers_meta})
 
 
-_EMPTY_HOME_DATA = {"manufacturers": [], "retailers": [], "wishlist_skus": []}
+def _shell_home_data() -> dict:
+    """Manufacturers + retailers meta only — no products_by_range. Used by wishlist/owned pages."""
+    hidden_ranges = db.get_hidden_ranges()
+    mfrs = db.manufacturers_with_ranges()
+    for m in mfrs:
+        for r in m["ranges"]:
+            r["hidden"] = (m["slug"], r["slug"]) in hidden_ranges
+    retailers_meta = [{"slug": m.SLUG, "name": m.NAME, "icon": m.ICON} for m in RETAILERS]
+    wishlist_skus = db.wishlist_skus()
+    return {"manufacturers": mfrs, "retailers": retailers_meta, "wishlist_skus": wishlist_skus}
 
 
 @app.get("/owned", response_class=HTMLResponse)
 async def owned_page(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"home_data": _EMPTY_HOME_DATA})
+    return templates.TemplateResponse(request, "index.html", {"home_data": _shell_home_data()})
 
 
 @app.get("/wishlist", response_class=HTMLResponse)
 async def wishlist_page(request: Request):
-    return templates.TemplateResponse(request, "index.html", {"home_data": _EMPTY_HOME_DATA})
+    return templates.TemplateResponse(request, "index.html", {"home_data": _shell_home_data()})
 
 
 @app.get("/", response_class=HTMLResponse)
