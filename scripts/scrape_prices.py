@@ -139,31 +139,34 @@ async def main(args: argparse.Namespace) -> None:
     async with AsyncSession(impersonate=IMPERSONATE, timeout=20) as client:
         bar = tqdm(rows, unit="sku", dynamic_ncols=True)
         for i, row in enumerate(bar):
-            try:
-                prices = await scrape_sku(row["sku"], row["title"], client)
-                old = prev_prices.get(row["sku"], {})
-                db.upsert_from_retailer(row["sku"], row["title"], None, prices)
-                cheapest = _cheapest_in_stock(
-                    [{"price": v.get("price"), "in_stock": v.get("price") is not None} for v in prices.values()]
-                )
-                old_cheapest = _cheapest_in_stock(
-                    [{"price": v.get("price") if isinstance(v, dict) else v,
-                      "in_stock": (v.get("price") if isinstance(v, dict) else v) is not None}
-                     for v in old.values()]
-                )
-                status = f"£{cheapest:.2f}" if cheapest else "no stock"
-                if cheapest is not None and old_cheapest is not None:
-                    if cheapest < old_cheapest:
-                        status += f"  ↓ (was £{old_cheapest:.2f})"
-                    elif cheapest > old_cheapest:
-                        status += f"  ↑ (was £{old_cheapest:.2f})"
-                log.info("%-20s %-50s %s", row["sku"], (row["title"] or "")[:50], status)
-            except WaylandBlockedError:
-                tqdm.write("\nWayland is blocking requests. Update cookies then press Enter to continue...")
-                tqdm.write("Run in another terminal: uv run python scripts/capture_wayland_cookies.py --paste")
-                input()
-            except Exception:
-                log.exception("Failed for SKU %s", row["sku"])
+            while True:
+                try:
+                    prices = await scrape_sku(row["sku"], row["title"], client)
+                    old = prev_prices.get(row["sku"], {})
+                    db.upsert_from_retailer(row["sku"], row["title"], None, prices)
+                    cheapest = _cheapest_in_stock(
+                        [{"price": v.get("price"), "in_stock": v.get("price") is not None} for v in prices.values()]
+                    )
+                    old_cheapest = _cheapest_in_stock(
+                        [{"price": v.get("price") if isinstance(v, dict) else v,
+                          "in_stock": (v.get("price") if isinstance(v, dict) else v) is not None}
+                         for v in old.values()]
+                    )
+                    status = f"£{cheapest:.2f}" if cheapest else "no stock"
+                    if cheapest is not None and old_cheapest is not None:
+                        if cheapest < old_cheapest:
+                            status += f"  ↓ (was £{old_cheapest:.2f})"
+                        elif cheapest > old_cheapest:
+                            status += f"  ↑ (was £{old_cheapest:.2f})"
+                    log.info("%-20s %-50s %s", row["sku"], (row["title"] or "")[:50], status)
+                    break
+                except WaylandBlockedError:
+                    tqdm.write("\nWayland is blocking requests. Update cookies then press Enter to retry...")
+                    tqdm.write("Run in another terminal: uv run python scripts/capture_wayland_cookies.py --paste")
+                    input()
+                except Exception:
+                    log.exception("Failed for SKU %s", row["sku"])
+                    break
             if i < len(rows) - 1:
                 await asyncio.sleep(args.delay)
 
