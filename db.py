@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS products (
     wishlisted_at TEXT,
     hidden INTEGER NOT NULL DEFAULT 0,
     owned INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT
+    updated_at TEXT,
+    prices_updated_at TEXT
 );
 CREATE TABLE IF NOT EXISTS manufacturers (
     slug TEXT PRIMARY KEY,
@@ -76,6 +77,7 @@ def init() -> None:
             "ALTER TABLE products ADD COLUMN description TEXT",
             "ALTER TABLE products ADD COLUMN category TEXT",
             "ALTER TABLE products ADD COLUMN blacklisted_stores TEXT",
+            "ALTER TABLE products ADD COLUMN prices_updated_at TEXT",
         ):
             try:
                 c.execute(stmt)
@@ -116,14 +118,15 @@ def upsert_from_retailer(sku: str, title: str | None, image_url: str | None,
     now = _now()
     with _conn() as c:
         c.execute(
-            """INSERT INTO products (sku, title, image_url, prices_json, updated_at)
-               VALUES (?, ?, ?, ?, ?)
+            """INSERT INTO products (sku, title, image_url, prices_json, updated_at, prices_updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)
                ON CONFLICT(sku) DO UPDATE SET
                  title = COALESCE(excluded.title, products.title),
                  image_url = COALESCE(products.image_url, excluded.image_url),
                  prices_json = excluded.prices_json,
-                 updated_at = excluded.updated_at""",
-            (key, title, image_url, payload, now),
+                 updated_at = excluded.updated_at,
+                 prices_updated_at = excluded.prices_updated_at""",
+            (key, title, image_url, payload, now, now),
         )
 
 

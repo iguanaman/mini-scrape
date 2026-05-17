@@ -92,7 +92,7 @@ async def main(args: argparse.Namespace) -> None:
     if args.wishlist:
         query += " AND wishlisted_at IS NOT NULL"
     if args.older_than is not None:
-        query += " AND (updated_at IS NULL OR updated_at < datetime('now', ?))"
+        query += " AND (prices_updated_at IS NULL OR prices_updated_at < datetime('now', ?))"
         params.append(f"-{args.older_than} days")
     if args.manufacturer:
         query += " AND manufacturer_slug = ?"
