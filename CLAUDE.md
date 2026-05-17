@@ -161,6 +161,7 @@ Same product across multiple retailers collapses into one card. Bucket by SKU fi
 - Tmp scratch scripts go in `.tmp/` (gitignored). Use them to dump raw HTML/JSON before writing a parser.
 - Playwright MCP is configured at project scope in `.mcp.json` — useful for inspecting JS-rendered pages and network calls.
 - 15-minute in-memory caches for `/search` and `/manufacturer/{slug}/{range}`. Wiped on server restart.
+- After completing any code change, automatically commit to main with a descriptive message. No need to wait for the user to ask.
 
 ## Run
 ```
