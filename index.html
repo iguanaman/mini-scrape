@@ -1000,7 +1000,7 @@ function sortProducts(products) {
       const retailers = HOME_DATA.retailers || [];
       storeFilters.innerHTML = retailers.map(r => `
         <button type="button" data-slug="${esc(r.slug)}" title="${esc(r.name)}"
-          class="store-filter w-4 h-4 rounded p-px border ${selectedStores.has(r.slug) ? 'border-black bg-white ring-1 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
+          class="store-filter w-5 h-5 rounded p-px border ${selectedStores.has(r.slug) ? 'border-black bg-white ring-1 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
           <img src="${esc(r.icon)}" class="w-full h-full object-contain" alt="${esc(r.name)}" />
         </button>`).join('');
       storeFilters.querySelectorAll('.store-filter').forEach(btn => {
