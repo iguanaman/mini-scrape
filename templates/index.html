@@ -775,34 +775,32 @@
         </div>`;
     }
 
+    function filteredCheapest(p) {
+      const sel = selectedStores;
+      const prices = Object.entries(p.prices || {})
+        .filter(([slug]) => !sel.size || sel.has(slug))
+        .map(([, e]) => e && typeof e === 'object' ? e.price : e)
+        .filter(v => typeof v === 'number');
+      return prices.length ? Math.min(...prices) : null;
+    }
+
     function ppmOf(p) {
-      const prices = Object.values(p.prices || {}).map(e => e && typeof e === 'object' ? e.price : e).filter(v => typeof v === 'number');
+      const c = filteredCheapest(p);
       const minis = (p.sku && minisMap.get(normSku(p.sku))) ?? p.minis;
-      return prices.length && minis ? Math.min(...prices) / minis : null;
+      return c !== null && minis ? c / minis : null;
     }
 function sortProducts(products) {
       let copy = [...products];
       if (selectedSort === 'name') {
         copy.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
       } else if (selectedSort === 'price_per_mini' || selectedSort === 'price') {
-        const cheapest = p => {
-          const prices = Object.values(p.prices || {})
-            .map(e => e && typeof e === 'object' ? e.price : e)
-            .filter(v => typeof v === 'number');
-          return prices.length ? Math.min(...prices) : null;
-        };
-        const ppm = p => {
-          const c = cheapest(p);
-          const minis = (p.sku && minisMap.get(normSku(p.sku))) ?? p.minis;
-          return c !== null && minis ? c / minis : null;
-        };
         if (selectedSort === 'price_per_mini') {
           copy.sort((a, b) => {
-            const pa = ppm(a), pb = ppm(b);
+            const pa = ppmOf(a), pb = ppmOf(b);
             if (pa !== null && pb !== null) return pa - pb;
             if (pa !== null) return -1;
             if (pb !== null) return 1;
-            const ca = cheapest(a), cb = cheapest(b);
+            const ca = filteredCheapest(a), cb = filteredCheapest(b);
             if (ca !== null && cb !== null) return ca - cb;
             if (ca !== null) return -1;
             if (cb !== null) return 1;
@@ -810,7 +808,7 @@ function sortProducts(products) {
           });
         } else {
           copy.sort((a, b) => {
-            const ca = cheapest(a), cb = cheapest(b);
+            const ca = filteredCheapest(a), cb = filteredCheapest(b);
             if (ca !== null && cb !== null) return ca - cb;
             if (ca !== null) return -1;
             if (cb !== null) return 1;
@@ -1333,10 +1331,11 @@ function sortProducts(products) {
       });
     }
 
-    // For wishlist/owned/manufacturer pages: filter card-outer visibility, offer rows, and sticker prices in the DOM.
+    // For wishlist/owned/manufacturer pages: filter card-outer visibility, offer rows, sticker prices, and sort order in the DOM.
     function applyStoreFilterToDOM() {
       const sel = selectedStores;
       [grid, manufacturers].forEach(container => {
+        const gridWrappers = new Set();
         container.querySelectorAll('.card-outer').forEach(outer => {
           const offerRows = outer.querySelectorAll('.offer-row');
           if (!sel.size) {
@@ -1349,20 +1348,38 @@ function sortProducts(products) {
               row.style.display = sel.has(row.dataset.slug) ? '' : 'none';
             });
           }
-          // Recompute sticker for this card
+          // Recompute sticker
           const stickerEl = outer.querySelector('.sticker');
-          if (!stickerEl || !stickerEl.dataset.prices) return;
-          let pricesBySlug;
-          try { pricesBySlug = JSON.parse(stickerEl.dataset.prices); } catch { return; }
-          const minis = stickerEl.dataset.minis ? parseInt(stickerEl.dataset.minis, 10) : null;
-          const price = computeDisplayPrice(pricesBySlug, sel);
-          const s = price !== null ? stickerStyle(price, minis) : { style: '', t: 1 };
-          stickerEl.style.cssText = price !== null ? s.style : '';
-          stickerEl.innerHTML = price !== null ? stickerInner(price, minis, s.t) : '';
-          // Also update minis counter price
-          const minisEl = outer.querySelector('.minis-counter');
-          if (minisEl) minisEl.dataset.price = price !== null ? price : '';
+          if (stickerEl && stickerEl.dataset.prices) {
+            let pricesBySlug;
+            try { pricesBySlug = JSON.parse(stickerEl.dataset.prices); } catch { pricesBySlug = {}; }
+            const minis = stickerEl.dataset.minis ? parseInt(stickerEl.dataset.minis, 10) : null;
+            const price = computeDisplayPrice(pricesBySlug, sel);
+            const s = price !== null ? stickerStyle(price, minis) : { style: '', t: 1 };
+            stickerEl.style.cssText = price !== null ? s.style : '';
+            stickerEl.innerHTML = price !== null ? stickerInner(price, minis, s.t) : '';
+            const minisEl = outer.querySelector('.minis-counter');
+            if (minisEl) minisEl.dataset.price = price !== null ? price : '';
+            outer.dataset.ppm = price !== null && minis ? String(price / minis) : '';
+            outer.dataset.filteredPrice = price !== null ? String(price) : '';
+          }
+          if (outer.parentElement) gridWrappers.add(outer.parentElement);
         });
+        if (selectedSort === 'price_per_mini' || selectedSort === 'price') {
+          gridWrappers.forEach(wrapper => {
+            const outers = [...wrapper.querySelectorAll(':scope > .card-outer')];
+            outers.sort((a, b) => {
+              const key = selectedSort === 'price_per_mini' ? 'ppm' : 'filteredPrice';
+              const pa = a.dataset[key] !== '' ? parseFloat(a.dataset[key]) : null;
+              const pb = b.dataset[key] !== '' ? parseFloat(b.dataset[key]) : null;
+              if (pa !== null && pb !== null) return pa - pb;
+              if (pa !== null) return -1;
+              if (pb !== null) return 1;
+              return 0;
+            });
+            outers.forEach(el => wrapper.appendChild(el));
+          });
+        }
       });
     }
 
