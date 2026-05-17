@@ -140,14 +140,12 @@ async def main(args: argparse.Namespace) -> None:
                       "in_stock": (v.get("price") if isinstance(v, dict) else v) is not None}
                      for v in old.values()]
                 )
-                drop = (
-                    cheapest is not None
-                    and old_cheapest is not None
-                    and cheapest < old_cheapest
-                )
                 status = f"£{cheapest:.2f}" if cheapest else "no stock"
-                if drop:
-                    status += f"  NEW LOW (was £{old_cheapest:.2f})"
+                if cheapest is not None and old_cheapest is not None:
+                    if cheapest < old_cheapest:
+                        status += f"  ↓ (was £{old_cheapest:.2f})"
+                    elif cheapest > old_cheapest:
+                        status += f"  ↑ (was £{old_cheapest:.2f})"
                 log.info("%-20s %s", row["sku"], status)
             except Exception:
                 log.exception("Failed for SKU %s", row["sku"])
