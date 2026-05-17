@@ -61,8 +61,8 @@ scripts/
 docs/                   Deep-dive references (see above).
 static/icons/           Retailer + manufacturer favicons
 templates/index.html    Frontend
-.vscode/tasks.json      "uv run uvicorn app:app --reload" as default build task
-.tmp/                   Scratch scripts + HTML/JSON dumps. Gitignored. Dot-prefix so uvicorn's watchfiles default-excludes it from --reload watching.
+.vscode/tasks.json      "uv run uvicorn app:app" as default build task
+.tmp/                   Scratch scripts + HTML/JSON dumps. Gitignored.
 server.txt              Server log (stdout + file). Gitignored.
 .playwright-mcp/        Playwright MCP artefacts. Gitignored.
 main.db                 sqlite product cache + wishlist. Gitignored.
@@ -153,18 +153,18 @@ Same product across multiple retailers collapses into one card. Bucket by SKU fi
 ## Conventions
 - After any significant change (new retailer, new manufacturer, new feature, schema change, behaviour change), update CLAUDE.md and the relevant `docs/` file to reflect the new state.
 - Working directory is already the project root — never `cd` into it (or anywhere else) before running bash commands. Use relative paths.
-- Server restart is only needed when `app.py` or `db.py` change. Changes to manufacturer/retailer modules, scripts, or other `.py` files take effect without a restart (uvicorn `--reload` picks them up, or they're run as scripts). After editing only client-side files (HTML templates, CSS, JS, static assets), tell the user to refresh the page — no restart needed.
+- Server does not use `--reload`. Any `.py` change requires a manual server restart. After editing only client-side files (HTML templates, CSS, JS, static assets), tell the user to refresh the page — no restart needed.
 - For ad-hoc Python probes, write a script to `.tmp/<name>.py` then run `uv run python .tmp/<name>.py`. Do NOT use `uv run python -c "…"` with inline code — long inline commands trip permission prompts.
 - Single user, localhost only — no auth, no rate limiting, no retries.
 - 15s timeout per request.
 - Errors fail loudly in dev (logged with stacktraces to server.txt), gracefully in UI.
 - Tmp scratch scripts go in `.tmp/` (gitignored). Use them to dump raw HTML/JSON before writing a parser.
 - Playwright MCP is configured at project scope in `.mcp.json` — useful for inspecting JS-rendered pages and network calls.
-- 15-minute in-memory caches for `/search` and `/manufacturer/{slug}/{range}`. Wiped on `--reload`.
+- 15-minute in-memory caches for `/search` and `/manufacturer/{slug}/{range}`. Wiped on server restart.
 
 ## Run
 ```
-uv run uvicorn app:app --reload
+uv run uvicorn app:app
 ```
 or hit `Ctrl+Shift+B` in VS Code (default build task).
 
