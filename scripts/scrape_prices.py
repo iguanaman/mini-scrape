@@ -7,11 +7,10 @@ Usage:
 Options:
     --manufacturer  Only scrape products from this manufacturer slug
     --range         Only scrape products from this range slug (requires --manufacturer)
-    --concurrency   Max parallel retailer requests per product (default: 6)
+    --delay         Seconds to wait between products (default: 1)
 """
 import argparse
 import asyncio
-import json
 import logging
 import sys
 import time
@@ -59,7 +58,6 @@ async def scrape_sku(sku: str, title: str | None, client: AsyncSession) -> dict[
             log.warning("Retailer %s failed for SKU %s: %s", module.NAME, sku, outcome)
             continue
         norm = _norm_sku(sku)
-        # Find best match for this SKU among results
         match = None
         for item in outcome:
             item_sku = _norm_sku(item.get("sku"))
@@ -67,7 +65,6 @@ async def scrape_sku(sku: str, title: str | None, client: AsyncSession) -> dict[
                 match = item
                 break
         if match is None and outcome:
-            # Fall back to first in-stock result if no SKU match
             match = next((r for r in outcome if r.get("in_stock") and isinstance(r.get("price"), (int, float))), None)
         if match is None:
             continue
@@ -107,24 +104,21 @@ async def main(args: argparse.Namespace) -> None:
     log.info("Scraping prices for %d products across %d retailers…", len(rows), len(RETAILERS))
     t0 = time.time()
 
-    sem = asyncio.Semaphore(args.concurrency)
-
-    async def scrape_one(sku: str, title: str | None) -> None:
-        async with sem:
+    async with AsyncSession(impersonate=IMPERSONATE, timeout=20) as client:
+        for i, row in enumerate(rows):
             try:
-                async with AsyncSession(impersonate=IMPERSONATE, timeout=20) as client:
-                    prices = await scrape_sku(sku, title, client)
-                db.upsert_from_retailer(sku, title, None, prices)
+                prices = await scrape_sku(row["sku"], row["title"], client)
+                db.upsert_from_retailer(row["sku"], row["title"], None, prices)
                 cheapest = _cheapest_in_stock(
                     [{"price": v.get("price"), "in_stock": v.get("price") is not None} for v in prices.values()]
                 )
                 status = f"£{cheapest:.2f}" if cheapest else "no stock"
-                log.info("%-20s %s", sku, status)
-                await asyncio.sleep(1)
+                log.info("%-20s %s", row["sku"], status)
             except Exception:
-                log.exception("Failed for SKU %s", sku)
+                log.exception("Failed for SKU %s", row["sku"])
+            if i < len(rows) - 1:
+                await asyncio.sleep(args.delay)
 
-    await asyncio.gather(*(scrape_one(row["sku"], row["title"]) for row in rows))
     log.info("Done in %.1fs", time.time() - t0)
 
 
@@ -132,6 +126,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manufacturer", help="Filter by manufacturer slug")
     parser.add_argument("--range", help="Filter by range slug (requires --manufacturer)")
-    parser.add_argument("--concurrency", type=int, default=3, help="Parallel products (default: 3)")
+    parser.add_argument("--delay", type=float, default=1.0, help="Seconds between products (default: 1)")
     args = parser.parse_args()
     asyncio.run(main(args))
