@@ -21,7 +21,8 @@ COLUMNS = ["sku", "title", "manufacturer", "description", "min_price", "minis", 
 def _strip_html(text: str | None) -> str | None:
     if not text:
         return text
-    return re.sub(r"<[^>]+>", " ", text).strip()
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _min_price(prices: dict) -> float | None:
