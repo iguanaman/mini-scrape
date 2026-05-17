@@ -554,7 +554,7 @@ def wishlist_skus() -> list[str]:
 def owned_products() -> list[dict]:
     with _conn() as c:
         rows = c.execute(
-            """SELECT sku, title, image_url, manufacturer_slug, manufacturer_url,
+            """SELECT sku, title, image_url, manufacturer_slug, range_slug, manufacturer_url,
                       prices_json, minis, owned, category, description, updated_at
                FROM products
                WHERE owned > 0
@@ -573,6 +573,7 @@ def owned_products() -> list[dict]:
             "title": r["title"],
             "image_url": r["image_url"],
             "manufacturer_slug": r["manufacturer_slug"],
+            "range_slug": r["range_slug"],
             "manufacturer_url": r["manufacturer_url"],
             "prices": prices,
             "minis": r["minis"],
@@ -587,7 +588,7 @@ def owned_products() -> list[dict]:
 def wishlist_products() -> list[dict]:
     with _conn() as c:
         rows = c.execute(
-            """SELECT sku, title, image_url, manufacturer_slug, manufacturer_url,
+            """SELECT sku, title, image_url, manufacturer_slug, range_slug, manufacturer_url,
                       prices_json, minis, owned, category, description, updated_at, wishlisted_at
                FROM products
                WHERE wishlisted_at IS NOT NULL
@@ -606,6 +607,7 @@ def wishlist_products() -> list[dict]:
             "title": r["title"],
             "image_url": r["image_url"],
             "manufacturer_slug": r["manufacturer_slug"],
+            "range_slug": r["range_slug"],
             "manufacturer_url": r["manufacturer_url"],
             "prices": prices,
             "minis": r["minis"],

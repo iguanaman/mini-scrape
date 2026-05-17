@@ -125,6 +125,7 @@
     let selectedSort = 'price_per_mini';
     let filterExpensive = 4;
     let lastRetailers = [];
+    let rangeEraMap = new Map(); // "man_slug/range_slug" -> era
     let lastWishlistItems = null;
     let lastOwnedItems = null;
     let wishlistSet = new Set();
@@ -133,6 +134,15 @@
 
     function loadWishlistSet() {
       wishlistSet = new Set(HOME_DATA.wishlist_skus || []);
+    }
+
+    function buildRangeEraMap() {
+      rangeEraMap.clear();
+      for (const m of (HOME_DATA.manufacturers || [])) {
+        for (const r of (m.ranges || [])) {
+          if (r.era) rangeEraMap.set(`${m.slug}/${r.slug}`, r.era);
+        }
+      }
     }
 
     function normSku(s) {
@@ -585,12 +595,13 @@ function sortProducts(products) {
         pill.classList.toggle('hidden', !catMatch || !eraMatch || ppmHide);
         pill.classList.remove('category-dim');
       });
-      // Cards: hide if category doesn't match or price/mini exceeds threshold
+      // Cards: hide if category/era doesn't match or price/mini exceeds threshold
       [manufacturers, grid].forEach(root => root.querySelectorAll('.card-outer').forEach(outer => {
         const catHide = cat !== 'all' && outer.dataset.category !== cat;
+        const eraHide = era !== 'all' && outer.dataset.era !== '' && outer.dataset.era !== era;
         const ppm = outer.dataset.ppm !== '' ? parseFloat(outer.dataset.ppm) : null;
         const expHide = filterExpensive !== null && ppm !== null && ppm > filterExpensive;
-        outer.classList.toggle('hidden', catHide || expHide);
+        outer.classList.toggle('hidden', catHide || eraHide || expHide);
       }));
       // Range containers: hide if open but all cards are filtered out
       manufacturers.querySelectorAll('.range-products').forEach(container => {
@@ -609,6 +620,12 @@ function sortProducts(products) {
         const pills = group.querySelectorAll('.range-pill');
         const allHidden = Array.from(pills).every(p => p.classList.contains('hidden'));
         group.classList.toggle('hidden', allHidden);
+      });
+      // Manufacturer sections: hide if all pills are hidden
+      manufacturers.querySelectorAll('section').forEach(section => {
+        const pills = section.querySelectorAll('.range-pill');
+        const allHidden = pills.length > 0 && Array.from(pills).every(p => p.classList.contains('hidden'));
+        section.classList.toggle('hidden', allHidden);
       });
     }
     function loadRange(manSlug, rangeSlug, container) {
@@ -688,7 +705,8 @@ function sortProducts(products) {
       lastWishlistItems = items;
       grid.innerHTML = sortProducts(items).map(p => {
         const ppm = ppmOf(p);
-        return `<div class="card-outer" data-category="${esc(p.category || 'unknown')}" data-ppm="${ppm !== null ? ppm : ''}">${productCard(p, lastRetailers)}</div>`;
+        const era = rangeEraMap.get(`${p.manufacturer_slug}/${p.range_slug}`) || '';
+        return `<div class="card-outer" data-category="${esc(p.category || 'unknown')}" data-ppm="${ppm !== null ? ppm : ''}" data-era="${esc(era)}">${productCard(p, lastRetailers)}</div>`;
       }).join('');
       const container = grid;
       container.querySelectorAll('.heart-btn').forEach(btn => {
@@ -820,7 +838,8 @@ function sortProducts(products) {
           : slug ? `<div class="mb-3"><h2 class="font-semibold">${esc(slug)}</h2></div>` : '';
         const cardsHtml = manItems.map(p => {
           const ppm = ppmOf(p);
-          return `<div class="card-outer" data-category="${esc(p.category || 'unknown')}" data-ppm="${ppm !== null ? ppm : ''}">${productCard(p, lastRetailers)}</div>`;
+          const era = rangeEraMap.get(`${p.manufacturer_slug}/${p.range_slug}`) || '';
+          return `<div class="card-outer" data-category="${esc(p.category || 'unknown')}" data-ppm="${ppm !== null ? ppm : ''}" data-era="${esc(era)}">${productCard(p, lastRetailers)}</div>`;
         }).join('');
         return `<section class="border rounded-lg bg-white overflow-hidden">
           <div class="p-4 pb-0">
@@ -1222,6 +1241,7 @@ function sortProducts(products) {
       HOME_DATA = await dataRes.value.json();
       STATIC_MODE = pingRes.status === 'rejected' || !pingRes.value.ok;
       loadWishlistSet();
+      buildRangeEraMap();
       const page = new URLSearchParams(location.search).get('page');
       if (page === 'wishlist') {
         showWishlist();
