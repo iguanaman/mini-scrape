@@ -701,17 +701,17 @@
       const imgInner = p.image_url
         ? `<img src="${esc(p.image_url)}" class="w-full h-full object-contain" alt="${esc(p.title)}" />`
         : `<div class="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">no image</div>`;
-      const retailerPrices = Object.values(p.prices || {})
-        .map(e => e && typeof e === 'object' ? e.price : e)
-        .filter(v => typeof v === 'number');
-      const cheapestRetailer = retailerPrices.length ? Math.min(...retailerPrices) : null;
-      const displayPrice = cheapestRetailer;
+      const pricesBySlug = Object.fromEntries(
+        Object.entries(p.prices || {}).map(([slug, e]) => [slug, e && typeof e === 'object' ? e.price : e])
+          .filter(([, v]) => typeof v === 'number')
+      );
       const hasCachedPrices = !!(allRetailers && allRetailers.length && Object.keys(p.prices || {}).length);
-      const livePrice = cheapestRetailer !== null;
+      const displayPrice = computeDisplayPrice(pricesBySlug, selectedStores);
+      const livePrice = displayPrice !== null;
       const priceState = livePrice ? 'loaded' : (sku ? 'idle' : 'loaded');
       const _pStickerS = livePrice ? stickerStyle(displayPrice, p.minis) : { style: '', t: 1 };
       const sticker = `<div class="sticker absolute bottom-8 right-3 flex flex-col items-center justify-center text-stone-900"
-             style="${_pStickerS.style}">
+             style="${_pStickerS.style}" data-prices="${esc(JSON.stringify(pricesBySlug))}" data-minis="${p.minis ?? ''}">
            ${displayPrice !== null ? stickerInner(displayPrice, p.minis, _pStickerS.t) : ''}
          </div>`;
       const heartFilled = sku ? wishlistSet.has(normSku(sku)) : false;
@@ -1305,6 +1305,12 @@ function sortProducts(products) {
       }
     }
 
+    function computeDisplayPrice(pricesBySlug, sel) {
+      const entries = Object.entries(pricesBySlug).filter(([slug]) => !sel.size || sel.has(slug));
+      if (!entries.length) return null;
+      return Math.min(...entries.map(([, v]) => v));
+    }
+
     function renderStoreFilters() {
       const retailers = HOME_DATA.retailers || [];
       storeFilters.innerHTML = retailers.map(r => `
@@ -1327,7 +1333,7 @@ function sortProducts(products) {
       });
     }
 
-    // For wishlist/owned/manufacturer pages: filter card-outer visibility and offer rows in the DOM.
+    // For wishlist/owned/manufacturer pages: filter card-outer visibility, offer rows, and sticker prices in the DOM.
     function applyStoreFilterToDOM() {
       const sel = selectedStores;
       [grid, manufacturers].forEach(container => {
@@ -1336,13 +1342,26 @@ function sortProducts(products) {
           if (!sel.size) {
             outer.style.display = '';
             offerRows.forEach(row => { row.style.display = ''; });
-            return;
+          } else {
+            const hasMatch = [...offerRows].some(row => sel.has(row.dataset.slug));
+            outer.style.display = hasMatch ? '' : 'none';
+            offerRows.forEach(row => {
+              row.style.display = sel.has(row.dataset.slug) ? '' : 'none';
+            });
           }
-          const hasMatch = [...offerRows].some(row => sel.has(row.dataset.slug));
-          outer.style.display = hasMatch ? '' : 'none';
-          offerRows.forEach(row => {
-            row.style.display = sel.has(row.dataset.slug) ? '' : 'none';
-          });
+          // Recompute sticker for this card
+          const stickerEl = outer.querySelector('.sticker');
+          if (!stickerEl || !stickerEl.dataset.prices) return;
+          let pricesBySlug;
+          try { pricesBySlug = JSON.parse(stickerEl.dataset.prices); } catch { return; }
+          const minis = stickerEl.dataset.minis ? parseInt(stickerEl.dataset.minis, 10) : null;
+          const price = computeDisplayPrice(pricesBySlug, sel);
+          const s = price !== null ? stickerStyle(price, minis) : { style: '', t: 1 };
+          stickerEl.style.cssText = price !== null ? s.style : '';
+          stickerEl.innerHTML = price !== null ? stickerInner(price, minis, s.t) : '';
+          // Also update minis counter price
+          const minisEl = outer.querySelector('.minis-counter');
+          if (minisEl) minisEl.dataset.price = price !== null ? price : '';
         });
       });
     }
