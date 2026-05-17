@@ -11,6 +11,7 @@ Options:
 """
 import argparse
 import asyncio
+import json
 import logging
 import sys
 import time
@@ -95,7 +96,21 @@ async def main(args: argparse.Namespace) -> None:
     query += " ORDER BY manufacturer_slug, range_slug, sku"
 
     rows = conn.execute(query, params).fetchall()
+
+    # Pre-load existing prices for price-drop detection
+    skus = [r["sku"] for r in rows]
+    placeholders = ",".join("?" * len(skus))
+    prev_rows = conn.execute(
+        f"SELECT sku, prices_json FROM products WHERE sku IN ({placeholders})", skus
+    ).fetchall() if skus else []
     conn.close()
+    prev_prices: dict[str, dict] = {}
+    for pr in prev_rows:
+        if pr["prices_json"]:
+            try:
+                prev_prices[pr["sku"]] = json.loads(pr["prices_json"])
+            except Exception:
+                pass
 
     if not rows:
         log.info("No products found matching filters.")
@@ -108,11 +123,24 @@ async def main(args: argparse.Namespace) -> None:
         for i, row in enumerate(rows):
             try:
                 prices = await scrape_sku(row["sku"], row["title"], client)
+                old = prev_prices.get(row["sku"], {})
                 db.upsert_from_retailer(row["sku"], row["title"], None, prices)
                 cheapest = _cheapest_in_stock(
                     [{"price": v.get("price"), "in_stock": v.get("price") is not None} for v in prices.values()]
                 )
+                old_cheapest = _cheapest_in_stock(
+                    [{"price": v.get("price") if isinstance(v, dict) else v,
+                      "in_stock": (v.get("price") if isinstance(v, dict) else v) is not None}
+                     for v in old.values()]
+                )
+                drop = (
+                    cheapest is not None
+                    and old_cheapest is not None
+                    and cheapest < old_cheapest
+                )
                 status = f"£{cheapest:.2f}" if cheapest else "no stock"
+                if drop:
+                    status += f"  NEW LOW (was £{old_cheapest:.2f})"
                 log.info("%-20s %s", row["sku"], status)
             except Exception:
                 log.exception("Failed for SKU %s", row["sku"])
