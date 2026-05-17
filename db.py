@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS ranges (
     manufacturer_slug TEXT NOT NULL REFERENCES manufacturers(slug),
     name TEXT,
     grp TEXT,
+    era TEXT,
     PRIMARY KEY (slug, manufacturer_slug)
 );
 CREATE TABLE IF NOT EXISTS hidden_ranges (
@@ -78,6 +79,7 @@ def init() -> None:
             "ALTER TABLE products ADD COLUMN category TEXT",
             "ALTER TABLE products ADD COLUMN blacklisted_stores TEXT",
             "ALTER TABLE products ADD COLUMN prices_updated_at TEXT",
+            "ALTER TABLE ranges ADD COLUMN era TEXT",
         ):
             try:
                 c.execute(stmt)
@@ -458,7 +460,7 @@ def manufacturers_with_ranges() -> list[dict]:
             "SELECT slug, name, icon FROM manufacturers ORDER BY name"
         ).fetchall()
         ranges = c.execute(
-            """SELECT r.slug, r.manufacturer_slug, r.name, r.grp
+            """SELECT r.slug, r.manufacturer_slug, r.name, r.grp, r.era
                FROM ranges r
                ORDER BY r.manufacturer_slug, r.name"""
         ).fetchall()
@@ -497,6 +499,7 @@ def manufacturers_with_ranges() -> list[dict]:
             "slug": r["slug"],
             "name": r["name"],
             "group": r["grp"],
+            "era": r["era"],
             "categories": sorted(cats),
             "min_ppm": round(min_ppm, 4) if min_ppm is not None else None,
         })

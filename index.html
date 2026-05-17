@@ -45,6 +45,14 @@
     <div class="mx-auto p-4 relative flex items-center justify-center gap-4">
       <div class="absolute left-4 flex items-center gap-3">
         <select id="category-select" class="border rounded px-2 py-1 text-sm"></select>
+        <select id="era-select" class="border rounded px-2 py-1 text-sm">
+          <option value="all">All eras</option>
+          <option value="fantasy">Fantasy</option>
+          <option value="sci-fi">Sci-fi</option>
+          <option value="historical-ancient">Historical: Ancient</option>
+          <option value="historical-gunpowder">Historical: Gunpowder</option>
+          <option value="historical-modern">Historical: Modern</option>
+        </select>
         <select id="sort-select" class="border rounded px-2 py-1 text-sm">
           <option value="sku">SKU</option>
           <option value="name">Name</option>
@@ -107,11 +115,13 @@
     const manufacturers = document.getElementById('manufacturers');
     const storeFilters = document.getElementById('store-filters');
     const categorySelect = document.getElementById('category-select');
+    const eraSelect = document.getElementById('era-select');
     const sortSelect = document.getElementById('sort-select');
     const filterExpensiveSel = document.getElementById('filter-expensive');
 
     let selectedStores = new Set();
     let selectedCategory = 'minis';
+    let selectedEra = 'all';
     let selectedSort = 'price_per_mini';
     let filterExpensive = 4;
     let lastRetailers = [];
@@ -564,13 +574,15 @@ function sortProducts(products) {
 
     function applyFilters() {
       const cat = selectedCategory;
-      // Pills: hide if range has no products matching category or all are above ppm threshold
+      const era = selectedEra;
+      // Pills: hide if range has no products matching category/era or all are above ppm threshold
       manufacturers.querySelectorAll('.range-pill').forEach(pill => {
         const cats = (pill.dataset.categories || '').split(',').filter(Boolean);
         const catMatch = cat === 'all' || (cats.length > 0 && (cats.includes(cat) || (cat === 'unknown' && cats.includes('unknown'))));
+        const eraMatch = era === 'all' || pill.dataset.era === era;
         const minPpm = pill.dataset.minPpm !== '' ? parseFloat(pill.dataset.minPpm) : null;
         const ppmHide = filterExpensive !== null && minPpm !== null && minPpm > filterExpensive;
-        pill.classList.toggle('hidden', !catMatch || ppmHide);
+        pill.classList.toggle('hidden', !catMatch || !eraMatch || ppmHide);
         pill.classList.remove('category-dim');
       });
       // Cards: hide if category doesn't match or price/mini exceeds threshold
@@ -846,7 +858,7 @@ function sortProducts(products) {
         const mans = HOME_DATA.manufacturers || [];
         const pill = (manSlug, r) => {
           const empty = !r.hidden && !(r.categories || []).length;
-          return `<span class="range-pill inline-flex items-center border rounded-full text-sm overflow-hidden${r.hidden || empty ? ' opacity-50' : ''}" data-hidden="${r.hidden ? '1' : '0'}" data-categories="${esc((r.categories || []).join(','))}" data-min-ppm="${r.min_ppm != null ? r.min_ppm : ''}">
+          return `<span class="range-pill inline-flex items-center border rounded-full text-sm overflow-hidden${r.hidden || empty ? ' opacity-50' : ''}" data-hidden="${r.hidden ? '1' : '0'}" data-categories="${esc((r.categories || []).join(','))}" data-min-ppm="${r.min_ppm != null ? r.min_ppm : ''}" data-era="${esc(r.era || '')}">
           <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}"
             class="range-btn px-3 py-1 hover:bg-gray-100">${esc(r.name)}</button>
           <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}" title="Hide range"
@@ -1069,6 +1081,10 @@ function sortProducts(products) {
 
     categorySelect.addEventListener('change', () => {
       selectedCategory = categorySelect.value;
+      applyFilters();
+    });
+    eraSelect.addEventListener('change', () => {
+      selectedEra = eraSelect.value;
       applyFilters();
     });
     filterExpensiveSel.addEventListener('change', () => {
