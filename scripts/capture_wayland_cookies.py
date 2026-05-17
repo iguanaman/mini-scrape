@@ -61,7 +61,13 @@ def main() -> None:
                         help="Browser to read cookies from (default: chrome)")
     parser.add_argument("--paste", action="store_true",
                         help="Manually paste cookie string instead of reading from browser")
+    parser.add_argument("cookies", nargs="?", default=None,
+                        help="Cookie string to save directly (quote it in the shell)")
     args = parser.parse_args()
+
+    if args.cookies:
+        _save(args.cookies)
+        return
 
     if args.paste:
         print("Paste the cookie string (name=value; name=value ...) and press Enter:")
