@@ -1204,22 +1204,18 @@ function sortProducts(products) {
       showOwned();
     });
 
-    // Initial load — fetch from live API or fall back to static data.json
+    // Initial load — /static/data.json served live by FastAPI or as a static file
     (async () => {
-      try {
-        const r = await fetch('/api/home-data');
-        if (!r.ok) throw new Error(r.status);
-        HOME_DATA = await r.json();
-      } catch (_) {
-        STATIC_MODE = true;
-        try {
-          const r = await fetch('/static/data.json');
-          HOME_DATA = await r.json();
-        } catch (e) {
-          manufacturers.innerHTML = `<div class="text-sm text-red-700 p-4">Failed to load data.json: ${e}</div>`;
-          return;
-        }
+      const [dataRes, pingRes] = await Promise.allSettled([
+        fetch('/static/data.json'),
+        fetch('/api/ping'),
+      ]);
+      if (dataRes.status === 'rejected' || !dataRes.value.ok) {
+        manufacturers.innerHTML = `<div class="text-sm text-red-700 p-4">Failed to load data</div>`;
+        return;
       }
+      HOME_DATA = await dataRes.value.json();
+      STATIC_MODE = pingRes.status === 'rejected' || !pingRes.value.ok;
       loadWishlistSet();
       if (location.pathname === '/wishlist') {
         showWishlist();

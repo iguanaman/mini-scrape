@@ -96,8 +96,8 @@ async def ping():
     return JSONResponse({"ok": True})
 
 
-@app.get("/api/home-data")
-async def home_data():
+@app.get("/static/data.json")
+async def live_data():
     return JSONResponse(_build_home_data())
 
 
