@@ -120,6 +120,7 @@ async def main(args: argparse.Namespace) -> None:
                 )
                 status = f"£{cheapest:.2f}" if cheapest else "no stock"
                 log.info("%-20s %s", sku, status)
+                await asyncio.sleep(1)
             except Exception:
                 log.exception("Failed for SKU %s", sku)
 
