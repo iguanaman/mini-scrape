@@ -618,16 +618,21 @@
             <path d="${cardsExpanded ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'}"/>
           </svg>
         </button>` : '';
-      const hasStock = g.any_in_stock;
-      const _stickerS = hasStock ? stickerStyle(g.cheapest_price, g.minis) : { style: '', t: 1 };
-      const stickerHtml = stickerInner(hasStock ? g.cheapest_price : null, g.minis, _stickerS.t);
+      const stockRows = filteredRows.filter(r => r.in_stock && r.price != null);
+      const hasStock = stockRows.length > 0;
+      const cheapestRow = hasStock ? stockRows.reduce((a, b) => a.price <= b.price ? a : b) : null;
+      const cheapestPrice = cheapestRow ? cheapestRow.price : null;
+      const cheapestRetailer = cheapestRow ? cheapestRow.retailer : (g.cheapest_retailer || '');
+      const cheapestUrl = cheapestRow ? cheapestRow.url : g.cheapest_url;
+      const _stickerS = hasStock ? stickerStyle(cheapestPrice, g.minis) : { style: '', t: 1 };
+      const stickerHtml = stickerInner(cheapestPrice, g.minis, _stickerS.t);
 
       const imgInner = g.image_url
         ? `<img src="${esc(g.image_url)}" class="w-full h-full object-contain" alt="${esc(g.title)}" />`
         : `<div class="w-full h-full flex items-center justify-center text-gray-400 bg-gray-100">no image</div>`;
 
       const imgWrap = hasStock
-        ? `<a href="${esc(g.cheapest_url)}" target="_blank" rel="noopener" class="block w-full h-full">${imgInner}</a>`
+        ? `<a href="${esc(cheapestUrl)}" target="_blank" rel="noopener" class="block w-full h-full">${imgInner}</a>`
         : imgInner;
 
       const firstSku = (g.skus && g.skus[0]) || null;
@@ -647,7 +652,7 @@
       const firstOwnedCount = firstSku ? (ownedMap.get(normSku(firstSku)) || 0) : 0;
       const ownedBtn = firstSku ? ownedCounter(firstSku, firstOwnedCount) : '';
       const firstMinisCount = firstSku ? (minisMap.get(normSku(firstSku)) ?? (g.minis || 0)) : 0;
-      const minisBtn = firstSku ? minisCounter(firstSku, firstMinisCount, hasStock ? g.cheapest_price : null) : '';
+      const minisBtn = firstSku ? minisCounter(firstSku, firstMinisCount, cheapestPrice) : '';
       return `
         <div class="card-wrap bg-white border rounded-lg overflow-hidden flex flex-col"
              ${g.image_url ? `data-lb-img="${esc(g.image_url)}" data-lb-title="${esc(g.title)}"` : ''}>
@@ -659,7 +664,7 @@
             ${minisBtn}
             <div class="sticker absolute bottom-8 right-3 flex flex-col items-center justify-center text-stone-900"
                  style="${hasStock ? _stickerS.style : ''}"
-                 title="${esc(g.cheapest_retailer || '')}">
+                 title="${esc(cheapestRetailer)}">
               ${stickerHtml}
             </div>
           </div>
