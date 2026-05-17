@@ -49,6 +49,32 @@
       "problemMatcher": []
     },
     {
+      "label": "Scrape prices",
+      "type": "shell",
+      "command": "uv run python scripts/scrape_prices.py",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Export static",
+      "type": "shell",
+      "command": "uv run python scripts/export_static.py",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "Llama Server",
       "type": "shell",
       "command": "\"/d/Work/github/llama.cpp/llama-server.exe\" -m /d/Work/github/llama.cpp/models/Qwen3.5-9B-UD-IQ2_M.gguf --port 8081 -ngl 99 --ctx-size 2048 --cache-ram 16 --reasoning-budget 0",
