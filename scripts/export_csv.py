@@ -6,6 +6,7 @@ Usage:
     uv run python scripts/export_csv.py owned      # -> owned_export.csv
 """
 import csv
+import re
 import sys
 from pathlib import Path
 
@@ -15,6 +16,12 @@ sys.path.insert(0, str(ROOT))
 import db
 
 COLUMNS = ["sku", "title", "manufacturer", "description", "min_price", "minis", "price_per_mini"]
+
+
+def _strip_html(text: str | None) -> str | None:
+    if not text:
+        return text
+    return re.sub(r"<[^>]+>", " ", text).strip()
 
 
 def _min_price(prices: dict) -> float | None:
@@ -27,7 +34,7 @@ def _row(p: dict) -> list:
     min_price = _min_price(p.get("prices") or {})
     minis = p.get("minis")
     ppm = round(min_price / minis, 4) if min_price and minis else None
-    return [p["sku"], p["title"], p["manufacturer_slug"], p.get("description"), min_price, minis, ppm]
+    return [p["sku"], p["title"], p["manufacturer_slug"], _strip_html(p.get("description")), min_price, minis, ppm]
 
 
 def export(mode: str) -> None:
