@@ -1,14 +1,50 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
-  <!-- Head -->
-  <circle cx="8" cy="3.5" r="2" fill="#e2e8f0"/>
-  <!-- Body -->
-  <rect x="6" y="6" width="4" height="4" rx="0.5" fill="#94a3b8"/>
-  <!-- Arms -->
-  <line x1="6" y1="7" x2="3.5" y2="9" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
-  <line x1="10" y1="7" x2="12.5" y2="9" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
-  <!-- Legs -->
-  <line x1="7" y1="10" x2="6" y2="13.5" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
-  <line x1="9" y1="10" x2="10" y2="13.5" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
-  <!-- Base tab -->
-  <rect x="5" y="13.5" width="6" height="1.5" rx="0.5" fill="#64748b"/>
+  <!-- Base -->
+  <ellipse cx="8" cy="15" rx="4" ry="1" fill="#5c4033"/>
+  <rect x="4" y="14" width="8" height="1.5" rx="0.5" fill="#7c5c3e"/>
+
+  <!-- Legs / boots -->
+  <rect x="6.2" y="10.5" width="1.5" height="3" rx="0.4" fill="#3b3b5c"/>
+  <rect x="8.3" y="10.5" width="1.5" height="3" rx="0.4" fill="#3b3b5c"/>
+  <rect x="6" y="12.8" width="1.8" height="1" rx="0.3" fill="#2a2a40"/>
+  <rect x="8.1" y="12.8" width="1.8" height="1" rx="0.3" fill="#2a2a40"/>
+
+  <!-- Torso / armour -->
+  <rect x="5.8" y="6.2" width="4.4" height="4.5" rx="0.6" fill="#7c8fa0"/>
+  <!-- Chest highlight -->
+  <rect x="6.2" y="6.5" width="3.6" height="1.2" rx="0.3" fill="#a0b4c4" opacity="0.6"/>
+  <!-- Belt -->
+  <rect x="5.8" y="9.8" width="4.4" height="0.9" rx="0.2" fill="#5c4a2a"/>
+  <rect x="7.6" y="9.7" width="0.8" height="1.1" rx="0.2" fill="#c8a84b"/>
+
+  <!-- Shield (left arm) -->
+  <path d="M3.5 6.5 L3 8.5 L4.2 10 L5.5 10 L5.5 6.5 Z" fill="#8b2020"/>
+  <path d="M3.7 6.7 L3.3 8.4 L4.2 9.6 L5.3 9.6 L5.3 6.7 Z" fill="#a82828"/>
+  <!-- Shield boss -->
+  <circle cx="4.4" cy="8.1" r="0.7" fill="#c0a030"/>
+  <!-- Shield cross -->
+  <line x1="4.4" y1="7" x2="4.4" y2="9.2" stroke="#c0a030" stroke-width="0.4"/>
+  <line x1="3.6" y1="8.1" x2="5.2" y2="8.1" stroke="#c0a030" stroke-width="0.4"/>
+
+  <!-- Sword (right arm raised) -->
+  <line x1="11" y1="9.5" x2="13.5" y2="3.5" stroke="#b0bec5" stroke-width="0.9" stroke-linecap="round"/>
+  <!-- Sword crossguard -->
+  <line x1="10.2" y1="8.5" x2="11.8" y2="7.5" stroke="#c0a030" stroke-width="1" stroke-linecap="round"/>
+  <!-- Sword handle -->
+  <line x1="10.8" y1="9.8" x2="11.3" y2="8.8" stroke="#7c5c3e" stroke-width="1.2" stroke-linecap="round"/>
+
+  <!-- Neck -->
+  <rect x="7.2" y="5.2" width="1.6" height="1.2" rx="0.2" fill="#e8c9a0"/>
+
+  <!-- Head / helmet -->
+  <rect x="6.2" y="3.2" width="3.6" height="3" rx="0.8" fill="#7c8fa0"/>
+  <!-- Helmet visor slit -->
+  <rect x="6.5" y="4.4" width="3" height="0.5" rx="0.2" fill="#1a2a3a" opacity="0.8"/>
+  <!-- Helmet ridge -->
+  <rect x="7.8" y="2.5" width="0.5" height="1" rx="0.2" fill="#9ab0c0"/>
+  <!-- Helmet highlight -->
+  <path d="M6.4 3.4 Q8 2.8 9.6 3.4" stroke="#b0c8d8" stroke-width="0.5" fill="none" opacity="0.7"/>
+
+  <!-- Plume -->
+  <path d="M8 2.5 Q7 1.2 6.5 0.5 Q7.5 1.5 8 1 Q8.5 1.5 9.5 0.5 Q9 1.2 8 2.5Z" fill="#c0392b"/>
 </svg>
