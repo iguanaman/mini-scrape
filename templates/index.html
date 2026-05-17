@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Mini Scrape</title>
+  <title>Mini Market</title>
+  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .line-clamp-2 {
@@ -174,36 +175,42 @@
     }
 
     function ownedCounter(sku, count) {
+      if (count <= 0 && STATIC_MODE) return '';
       const visible = count > 0 ? 'has-count' : 'opacity-0';
       const ownedLabel = count === 1 ? '1 owned' : `${count} owned`;
+      const inputs = STATIC_MODE ? '' : `
+              <div class="counter-inputs rounded-full">
+                <button type="button" class="owned-dec w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Decrease owned">−</button>
+                <span class="owned-label text-sm font-semibold font-mono text-gray-800 w-[3ch] text-center">${count}</span>
+                <button type="button" class="owned-inc w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Increase owned">+</button>
+              </div>`;
       return `
-        <div class="owned-counter absolute bottom-2 left-2 z-10 bg-blue-100/90 backdrop-blur shadow rounded-full px-2 py-0.5 transition-opacity duration-500 ${visible}"
+        <div class="owned-counter absolute bottom-2 left-2 z-10 bg-blue-100/90 backdrop-blur shadow rounded-full px-2 py-0.5 ${STATIC_MODE ? '' : 'transition-opacity duration-500'} ${visible}"
              data-sku="${esc(sku)}" data-owned="${count}">
           <div class="relative flex items-center">
             <span class="counter-label text-xs font-semibold text-gray-700 whitespace-nowrap">${ownedLabel}</span>
-            <div class="counter-inputs rounded-full">
-              <button type="button" class="owned-dec w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Decrease owned">−</button>
-              <span class="owned-label text-sm font-semibold font-mono text-gray-800 w-[3ch] text-center">${count}</span>
-              <button type="button" class="owned-inc w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Increase owned">+</button>
-            </div>
+            ${inputs}
           </div>
         </div>`;
     }
 
     function minisCounter(sku, count, price) {
+      if (count <= 0 && STATIC_MODE) return '';
       const visible = count > 0 ? 'has-count' : 'opacity-0';
       const priceAttr = price != null ? ` data-price="${price}"` : '';
       const minisLabel = count === 1 ? '1 mini' : `${count} minis`;
+      const inputs = STATIC_MODE ? '' : `
+              <div class="counter-inputs rounded-full">
+                <button type="button" class="minis-dec w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Decrease minis">−</button>
+                <span class="minis-val text-sm font-semibold font-mono text-gray-800 w-[2ch] text-center">${count}</span>
+                <button type="button" class="minis-inc w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Increase minis">+</button>
+              </div>`;
       return `
-        <div class="minis-counter absolute bottom-2 right-2 z-10 bg-green-100/90 backdrop-blur shadow rounded-full py-0.5 transition-opacity duration-500 ${visible}"
+        <div class="minis-counter absolute bottom-2 right-2 z-10 bg-green-100/90 backdrop-blur shadow rounded-full py-0.5 ${STATIC_MODE ? '' : 'transition-opacity duration-500'} ${visible}"
              style="width:4.5rem" data-sku="${esc(sku)}" data-minis="${count}"${priceAttr}>
           <div class="relative flex items-center justify-center h-5">
             <span class="counter-label text-xs font-semibold text-gray-700 whitespace-nowrap">${minisLabel}</span>
-            <div class="counter-inputs rounded-full">
-              <button type="button" class="minis-dec w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Decrease minis">−</button>
-              <span class="minis-val text-sm font-semibold font-mono text-gray-800 w-[2ch] text-center">${count}</span>
-              <button type="button" class="minis-inc w-5 h-5 flex items-center justify-center text-gray-600 hover:text-black text-base leading-none" aria-label="Increase minis">+</button>
-            </div>
+            ${inputs}
           </div>
         </div>`;
     }
