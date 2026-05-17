@@ -72,6 +72,9 @@ scripts/
   export_static.py         Writes static/data.json from the DB (manufacturers, retailers,
                            wishlist, owned). Run before serving statically.
                            Run: uv run python scripts/export_static.py
+  export_csv.py            Exports wishlist or owned products to CSV (sku, title, manufacturer,
+                           description, min_price, minis, price_per_mini).
+                           Run: uv run python scripts/export_csv.py wishlist|owned
 docs/                   Deep-dive references (see above).
 static/icons/           Retailer + manufacturer favicons
 static/data.json        Exported DB snapshot for static mode. Gitignored.
