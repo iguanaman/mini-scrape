@@ -65,6 +65,8 @@ async def scrape_sku(sku: str, title: str | None, client: AsyncSession) -> dict[
     )
     prices: dict[str, dict] = {}
     for module, outcome in zip(RETAILERS, outcomes):
+        if isinstance(outcome, WaylandBlockedError):
+            raise outcome
         if isinstance(outcome, Exception):
             log.warning("Retailer %s failed for SKU %s: %s", module.NAME, sku, outcome)
             continue
