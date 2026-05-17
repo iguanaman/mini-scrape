@@ -659,9 +659,6 @@ function sortProducts(products) {
         bindCardClicks(container);
         applyCategoryFilter();
         applyStoreFilterToDOM();
-      } catch (err) {
-        container.innerHTML = `<div class="text-sm text-red-700 px-2">${esc(String(err))}</div>`;
-      }
     }
 
     function openSearch(q) {
@@ -993,9 +990,6 @@ function sortProducts(products) {
             });
           });
         });
-      } catch (err) {
-        manufacturers.innerHTML = `<div class="text-sm text-red-700">${esc(String(err))}</div>`;
-      }
     }
 
     function computeDisplayPrice(pricesBySlug, sel) {
