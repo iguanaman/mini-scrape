@@ -20,6 +20,8 @@ Required-looking headers: `content-type: application/json`, `content-currency: G
 
 Post-filter: drop items where `stock_status != "IN_STOCK"` *inside the retailer module* (Wayland returns lots of out-of-stock noise; pruning early stops it from creating solo groups).
 
+**If you get 403s:** cookies have expired. Visit https://www.waylandgames.co.uk in Chrome, solve any challenge, then run `uv run python scripts/capture_wayland_cookies.py`. Cookies are stored in the DB `meta` table under `wayland_cookies` and injected into every GraphQL request. Default browser is Chrome; pass `--browser edge` or `--browser firefox` if needed.
+
 ## Firestorm Games
 `GET https://www.firestormgames.co.uk/products?q=<query>` (custom "totalretail" platform). Server-rendered HTML, 20 items per page.
 - Pagination via **`?resultpage=N`** (NOT `?page=N` — that param is ignored and returns page 1). We fetch pages 1 and 2 (= 40 max).
