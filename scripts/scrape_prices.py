@@ -8,6 +8,7 @@ Options:
     --wishlist      Only scrape wishlisted products
     --manufacturer  Only scrape products from this manufacturer slug
     --range         Only scrape products from this range slug (requires --manufacturer)
+    --older-than    Only scrape products last updated more than N days ago
     --delay         Seconds to wait between products (default: 1)
 """
 import argparse
@@ -90,6 +91,9 @@ async def main(args: argparse.Namespace) -> None:
     params: list = []
     if args.wishlist:
         query += " AND wishlisted_at IS NOT NULL"
+    if args.older_than is not None:
+        query += " AND (updated_at IS NULL OR updated_at < datetime('now', ?))"
+        params.append(f"-{args.older_than} days")
     if args.manufacturer:
         query += " AND manufacturer_slug = ?"
         params.append(args.manufacturer)
@@ -158,6 +162,7 @@ if __name__ == "__main__":
     parser.add_argument("--wishlist", action="store_true", help="Only scrape wishlisted products")
     parser.add_argument("--manufacturer", help="Filter by manufacturer slug")
     parser.add_argument("--range", help="Filter by range slug (requires --manufacturer)")
+    parser.add_argument("--older-than", type=int, metavar="DAYS", help="Only scrape products last updated more than N days ago")
     parser.add_argument("--delay", type=float, default=1.0, help="Seconds between products (default: 1)")
     args = parser.parse_args()
     asyncio.run(main(args))
