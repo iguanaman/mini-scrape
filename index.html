@@ -599,8 +599,6 @@ function sortProducts(products) {
         group.classList.toggle('hidden', allHidden);
       });
     }
-    function applyCategoryFilter() { applyFilters(); }
-
     function loadRange(manSlug, rangeSlug, container) {
         const man = (HOME_DATA.manufacturers || []).find(m => m.slug === manSlug);
         const products = (man && man.products_by_range && man.products_by_range[rangeSlug]) || [];
@@ -656,12 +654,8 @@ function sortProducts(products) {
           });
         });
         bindCardClicks(container);
-        applyCategoryFilter();
+        applyFilters();
         applyStoreFilterToDOM();
-    }
-
-    function openSearch(q) {
-      window.open('/?q=' + encodeURIComponent(q), '_blank', 'noopener');
     }
 
     function showWishlist() {
@@ -901,7 +895,7 @@ function sortProducts(products) {
             ${m.ranges.map(r => `<div class="range-products mt-2" data-man="${esc(m.slug)}" data-range="${esc(r.slug)}" hidden></div>`).join('')}
           </section>
         `).join('');
-        applyCategoryFilter();
+        applyFilters();
 
         manufacturers.querySelectorAll('.range-hide').forEach(btn => {
           btn.addEventListener('click', async (e) => {
