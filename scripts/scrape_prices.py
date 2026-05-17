@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from curl_cffi.requests import AsyncSession
+from tqdm import tqdm
 from retailers import IMPERSONATE
 from retailers import goblin, wayland, firestorm, element, overlord, nemc
 import db
@@ -30,10 +31,16 @@ import db
 RETAILERS = [goblin, wayland, firestorm, element, overlord, nemc]
 MIN_PRICE = 15.0
 
+
+class _TqdmHandler(logging.StreamHandler):
+    def emit(self, record):
+        tqdm.write(self.format(record))
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s: %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+    handlers=[_TqdmHandler(sys.stdout)],
 )
 log = logging.getLogger("scrape_prices")
 
@@ -127,7 +134,9 @@ async def main(args: argparse.Namespace) -> None:
     t0 = time.time()
 
     async with AsyncSession(impersonate=IMPERSONATE, timeout=20) as client:
-        for i, row in enumerate(rows):
+        bar = tqdm(rows, unit="sku", dynamic_ncols=True)
+        for i, row in enumerate(bar):
+            bar.set_postfix_str(row["sku"])
             try:
                 prices = await scrape_sku(row["sku"], row["title"], client)
                 old = prev_prices.get(row["sku"], {})
