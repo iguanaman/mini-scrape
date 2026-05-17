@@ -70,10 +70,10 @@
       </div>
       <div class="flex items-end gap-8">
         <a id="wishlist-link" href="/wishlist" class="text-sm no-underline text-gray-700 hover:text-black pb-0.5">Wishlist</a>
-        <a id="home-link" href="/" class="font-bold text-lg shrink-0 hover:text-gray-600">Mini Market</a>
+        <a id="home-link" href="/" class="font-bold text-2xl shrink-0 hover:text-gray-600">Mini Market</a>
         <a id="owned-link" href="/owned" class="text-sm no-underline text-gray-700 hover:text-black pb-0.5">Owned</a>
       </div>
-      <div id="store-filters" class="absolute right-4 flex items-center gap-2"></div>
+      <div id="store-filters" class="absolute right-4 flex items-center gap-1"></div>
     </div>
   </header>
 
@@ -1008,7 +1008,7 @@ function sortProducts(products) {
       const retailers = HOME_DATA.retailers || [];
       storeFilters.innerHTML = retailers.map(r => `
         <button type="button" data-slug="${esc(r.slug)}" title="${esc(r.name)}"
-          class="store-filter w-8 h-8 rounded p-0.5 border ${selectedStores.has(r.slug) ? 'border-black bg-white ring-2 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
+          class="store-filter w-4 h-4 rounded p-px border ${selectedStores.has(r.slug) ? 'border-black bg-white ring-1 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
           <img src="${esc(r.icon)}" class="w-full h-full object-contain" alt="${esc(r.name)}" />
         </button>`).join('');
       storeFilters.querySelectorAll('.store-filter').forEach(btn => {
