@@ -59,7 +59,7 @@ When merging: keep the shorter title (Goblin appends " - Range Name"), union tok
 Groups themselves sort: any-in-stock first, then by cheapest price asc.
 
 ## Frontend (`templates/index.html`)
-- Sticky header: home link "mini-scrape" (left) + centered search input/button + store-filter icons (right, only shown when search results loaded). Search syncs with URL (`?q=...`) so it's bookmarkable; `popstate` re-runs the search; on initial load if URL has `?q=` it auto-searches, otherwise renders manufacturer sections.
+- Sticky header: home link "Mini Market" (left) + centered search input/button + store-filter icons (right, only shown when search results loaded). Search syncs with URL (`?q=...`) so it's bookmarkable; `popstate` re-runs the search; on initial load if URL has `?q=` it auto-searches, otherwise renders manufacturer sections.
 - Home view (no `?q=`): bordered company sections, each with range "buttons". Click a range → expands inline, loads `/manufacturer/{slug}/{range}` lazily (once), shows product grid below the buttons. Product cards click to run a SKU-based search.
 - Collapsible left sidebar: clicking anywhere on it opens; clicking outside closes. Lists free-shipping thresholds: Wayland £20, Firestorm £60, Goblin £75, Element £80.
 - `#grid` is a CSS grid (4 columns) with fixed-width cards.

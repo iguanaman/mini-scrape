@@ -28,7 +28,7 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
     force=True,
 )
-log = logging.getLogger("mini-scrape")
+log = logging.getLogger("mini-market")
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")

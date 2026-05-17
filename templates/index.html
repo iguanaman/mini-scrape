@@ -97,7 +97,7 @@
           </svg>
         </button>
       </div>
-      <a id="home-link" href="/" class="font-bold text-lg shrink-0 hover:text-gray-600">mini-scrape</a>
+      <a id="home-link" href="/" class="font-bold text-lg shrink-0 hover:text-gray-600">Mini Market</a>
       <form id="f" class="flex gap-2 w-full max-w-md">
         <input id="q" name="q" type="text" autofocus
                placeholder="Search miniatures…"
@@ -137,7 +137,7 @@
       </div>
       <div class="flex items-center gap-3">
         <a id="wayland-bookmarklet" href="" class="inline-block bg-amber-200 hover:bg-amber-300 border border-amber-400 rounded px-3 py-1 font-medium cursor-grab select-none">
-          📋 Send cookies to mini-scrape
+          📋 Send cookies to Mini Market
         </a>
         <span id="wayland-cookie-status" class="text-green-700 hidden">✓ Cookies saved — search again to retry Wayland.</span>
       </div>
@@ -1472,7 +1472,7 @@ function sortProducts(products) {
         if(!c){alert('No cookies found — try browsing the site first.');return;}
         fetch('http://localhost:8000/api/wayland-cookies',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({cookies:c})})
           .then(function(r){return r.json();})
-          .then(function(d){alert(d.ok?'Cookies sent to mini-scrape!':'Failed: '+(d.error||'unknown'));})
+          .then(function(d){alert(d.ok?'Cookies sent to Mini Market!':'Failed: '+(d.error||'unknown'));})
           .catch(function(e){alert('Error: '+e);});
       })();`;
       bookmarklet.href = bmCode.replace(/\s+/g, ' ');

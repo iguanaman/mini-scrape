@@ -1,4 +1,4 @@
-# mini-scrape — project notes for Claude
+# Mini Market — project notes for Claude
 
 Personal localhost tool. Type a product name (or SKU), see prices from 4 UK miniature wargaming retailers as grouped product cards sorted by cheapest in-stock price. Home page also shows hardcoded manufacturer ranges — clicking a range fetches the manufacturer's product list directly. Clicking a product card with no prices triggers a background SKU search (shimmer animation, non-clickable while loading) and updates the sticker live; a second click opens the image in the lightbox. Cards with prices already cached open the lightbox immediately. Store lines (offer rows) inside a card open the retailer URL in a new tab — clicks stop propagating so they don't trigger the card's lightbox handler.
 
