@@ -22,7 +22,8 @@ def _strip_html(text: str | None) -> str | None:
     if not text:
         return text
     text = re.sub(r"<[^>]+>", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\n+", ". ", text)
+    return re.sub(r" +", " ", text).strip()
 
 
 def _min_price(prices: dict) -> float | None:
