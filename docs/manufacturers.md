@@ -20,12 +20,11 @@ Shopify store. `GET https://wargamesatlantic.com/collections/{handle}/products.j
 - RANGES (Shopify collection handles): Plastic Box Sets, Death Fields Arena, Quar, The Barons' War, Classic Fantasy, The Age of Chivalry, World Ablaze.
 
 ## Games Workshop (`manufacturers/gamesworkshop.py`)
-GW's own warhammer.com is behind AWS WAF (JS challenge — curl_cffi can't pass it; would need a real browser to mint the cookie). Instead we piggyback on Goblin Gaming's Shopify storefront, which carries the full GW range and exposes `collections/{handle}/products.json` — same pattern as Wargames Atlantic / Victrix / Warlord.
-- `GET https://www.goblingaming.co.uk/collections/{handle}/products.json?limit=250&page=N`.
-- Each product: `title`, `handle` (→ build URL), `variants[0]` for `price` + `sku`, `images[0].src`. **SKUs are populated** — Goblin includes GW's product codes in the variant `sku` field, which gives the search-side grouper a much better signal than the previous Element source.
-- Paginate while the page is full (250). Most faction collections are 1 page; only the 40k / AoS top-level "all" collections need pagination.
+Queries GW's own Algolia search index directly — no WAF bypass needed (Algolia is a separate domain that accepts plain curl_cffi requests).
+- Algolia app: `M5ZIQZNQ2H`, index: `prod-lazarus-product-en-gb`, public search-only API key.
+- Each range uses an Algolia `filters` facet string (e.g. `GameSystemsRoot.lvl2:"Age of Sigmar > Grand Alliance Death > Soulblight Gravelords"`). Fetches up to `HITS_PER_PAGE=100` hits per range.
+- Each hit: `title`, `handle` (→ build warhammer.com URL), `price`, `sku` (GW product code). **SKUs are populated** — gives the search-side grouper a strong signal.
 - RANGES (~70 entries) carry a `group` field for visual bucketing in the home view. Groups: Warhammer 40,000, Age of Sigmar, Skirmish (Kill Team / Warcry / Underworlds / Blood Bowl / Necromunda), Horus Heresy & Epic (HH / Legions Imperialis / Adeptus Titanicus), The Old World, Middle-earth, Hobby & Misc.
-- Quirks: Goblin's collection handles are inconsistent — some are clean (`adeptus-custodes`, `necromunda`, `warcry`) and others are verbose (`warhammer-age-of-sigmar-grand-alliance-of-order-stormcast-eternals`). Several faction collections were empty at mapping time and dropped (Black Templars, Blood Angels, Dark Angels, Death Guard, Deathwatch, Thousand Sons, Beasts of Chaos) — mostly 10th-ed codex chapters that no longer have standalone faction ranges. No Goblin collection exists yet for Leagues of Votann or Emperor's Children.
 
 ## Victrix (`manufacturers/victrix.py`)
 Shopify store. `GET https://victrixlimited.com/collections/{handle}/products.json?limit=250&page=N`. Same pattern as Wargames Atlantic.

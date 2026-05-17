@@ -36,9 +36,10 @@ manufacturers/
   artizan.py            Artizan Designs — same CMS/parser as NS, list.php?man=<id>. 10 ranges.
   crusader.py           Crusader Miniatures — same CMS/parser, list.php?cat=<id>&sub=<id>. 41 ranges.
   wargamesatlantic.py   Wargames Atlantic — Shopify collections/{handle}/products.json
-  gamesworkshop.py      Games Workshop — piggybacks on Goblin Gaming's Shopify storefront
-                        (GW's own site is AWS-WAF walled). ~70 ranges grouped by game system,
-                        SKUs populated from Goblin's variant fields.
+  gamesworkshop.py      Games Workshop — queries GW's own Algolia search index directly
+                        (app M5ZIQZNQ2H, index prod-lazarus-product-en-gb, public search-only key).
+                        No WAF bypass needed — Algolia is a separate domain. ~70 ranges grouped
+                        by game system, filtered by category facet.
   victrix.py            Victrix — Shopify (collections/{handle}/products.json). 28mm only.
   mantic.py             Mantic — WooCommerce Store API (/wp-json/wc/store/v1/products).
   warlord.py            Warlord Games — Shopify at store.warlordgames.com.
