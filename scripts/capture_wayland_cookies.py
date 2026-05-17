@@ -23,14 +23,22 @@ DOMAIN = "waylandgames.co.uk"
 
 LOADERS = {
     "chrome": browser_cookie3.chrome,
-    "firefox": browser_cookie3.firefox,
+    "chromium": browser_cookie3.chromium,
     "edge": browser_cookie3.edge,
+    "brave": browser_cookie3.brave,
+    "opera": browser_cookie3.opera,
+    "opera_gx": browser_cookie3.opera_gx,
+    "arc": browser_cookie3.arc,
+    "vivaldi": browser_cookie3.vivaldi,
+    "firefox": browser_cookie3.firefox,
+    "librewolf": browser_cookie3.librewolf,
 }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--browser", choices=list(LOADERS), default="chrome")
+    parser.add_argument("--browser", choices=list(LOADERS), default="chrome",
+                        help="Browser to read cookies from (default: chrome)")
     args = parser.parse_args()
 
     loader = LOADERS[args.browser]
