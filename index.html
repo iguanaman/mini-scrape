@@ -878,12 +878,14 @@ function sortProducts(products) {
             byGroup.get(g).push(r);
           }
           return groups.map(g => `<div class="pill-group mb-3" data-man="${esc(m.slug)}" data-group="${esc(g)}">
-            <div class="text-xs uppercase tracking-wide text-gray-500 group-label mb-1">${esc(g)}</div>
+            <div class="flex items-center gap-1 mb-1">
+              <div class="text-xs uppercase tracking-wide text-gray-500 group-label">${esc(g)}</div>
+              <button type="button" class="group-delete-btn text-gray-400 hover:text-red-500" title="Delete group" aria-label="Delete group">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
             <div class="flex flex-wrap gap-2 items-center">
               ${byGroup.get(g).map(r => pill(m.slug, r)).join('')}
-              <button type="button" class="group-delete-btn text-gray-400 hover:text-red-500" title="Delete group" aria-label="Delete group">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
             </div>
           </div>`).join('');
         };
