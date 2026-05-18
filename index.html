@@ -135,7 +135,7 @@
 
     let selectedStores = new Set(JSON.parse(localStorage.getItem('selectedStores') || '[]'));
     let selectedCategory = 'minis';
-    let selectedEra = 'all';
+    let selectedEra = localStorage.getItem('selectedEra') || 'all';
     let selectedSort = 'price_per_mini';
     const _savedFilterExpensive = localStorage.getItem('filterExpensive');
     let filterExpensive = _savedFilterExpensive !== null ? (_savedFilterExpensive === 'null' ? null : parseFloat(_savedFilterExpensive)) : 4;
@@ -1159,8 +1159,10 @@ function sortProducts(products) {
       selectedCategory = categorySelect.value;
       applyFilters();
     });
+    eraSelect.value = selectedEra;
     eraSelect.addEventListener('change', () => {
       selectedEra = eraSelect.value;
+      localStorage.setItem('selectedEra', selectedEra);
       applyFilters();
     });
     filterExpensiveSel.value = filterExpensive === null ? '' : String(filterExpensive);
