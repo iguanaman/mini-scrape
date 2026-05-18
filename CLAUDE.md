@@ -23,7 +23,9 @@ Read these on demand — not loaded by default:
 
 **Static mode** (`python -m http.server 8080 --bind 127.0.0.1` or GitHub Pages): `index.html` and `static/` are served as files. `GET /api/ping` fails → `STATIC_MODE = true`. Write APIs silently no-op. Wishlist, owned, hide, minis are display-only. Run `export_static.py` first to generate `static/data.json`.
 
-In static mode: owned/minis show label only (no +/− controls), hide button hidden, heart shows permanently if wishlisted but is not clickable.
+In static mode: owned/minis show label only (no +/− controls), hide button hidden, heart shows permanently if wishlisted but is not clickable. Settings gear icon is hidden in static mode.
+
+**Admin mode** (live mode only): toggled via the gear icon in the nav header (after store filter icons, separated by a divider). Off by default; state persists in `localStorage`. When off, pills show a muted count badge of visible products for that range (updates with filters). When on, pills show the hide-eye and delete-× icons, and group labels show the delete icon.
 
 ## Layout
 ```

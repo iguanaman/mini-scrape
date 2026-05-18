@@ -81,9 +81,23 @@
         <a id="home-link" href="/" class="font-bold text-2xl shrink-0 hover:text-gray-600">Mini Market</a>
         <a id="owned-link" href="/?page=owned" class="text-sm no-underline text-gray-700 hover:text-black pb-0.5">Owned</a>
       </div>
-      <div id="store-filters" class="absolute right-4 flex items-center gap-1"></div>
+      <div id="store-filters" class="absolute right-4 flex items-center gap-1">
+        <!-- store filter icons injected here by renderStoreFilters() -->
+      </div>
     </div>
   </header>
+
+  <!-- Settings modal (live mode only) -->
+  <div id="settings-modal" class="hidden fixed inset-0 z-50 flex items-start justify-end pt-16 pr-4" role="dialog" aria-modal="true">
+    <div class="bg-white border rounded-lg shadow-lg p-4 w-56">
+      <h3 class="font-semibold text-sm mb-3">Settings</h3>
+      <label class="flex items-center gap-2 cursor-pointer select-none text-sm">
+        <input type="checkbox" id="admin-mode-toggle" class="rounded" />
+        Admin mode
+      </label>
+      <p class="text-xs text-gray-400 mt-1">Shows hide/delete controls on range pills.</p>
+    </div>
+  </div>
 
   <aside id="sidebar"
          class="fixed top-20 left-0 z-20 bg-white border border-l-0 rounded-r-lg shadow-md transition-transform -translate-x-[calc(100%-0.5rem)] cursor-pointer">
@@ -126,6 +140,7 @@
     let filterExpensive = 4;
     let lastRetailers = [];
     let rangeEraMap = new Map(); // "man_slug/range_slug" -> era
+    let adminMode = localStorage.getItem('adminMode') === '1';
     let lastWishlistItems = null;
     let lastOwnedItems = null;
     let wishlistSet = new Set();
@@ -627,6 +642,17 @@ function sortProducts(products) {
         const allHidden = pills.length > 0 && Array.from(pills).every(p => p.classList.contains('hidden'));
         section.classList.toggle('hidden', allHidden);
       });
+      updatePillCounts();
+    }
+
+    function updatePillCounts() {
+      if (adminMode) return;
+      manufacturers.querySelectorAll('.range-count').forEach(badge => {
+        const { man, range } = badge.dataset;
+        const container = manufacturers.querySelector(`.range-products[data-man="${CSS.escape(man)}"][data-range="${CSS.escape(range)}"]`);
+        const count = container ? container.querySelectorAll('.card-outer:not(.hidden)').length : 0;
+        badge.textContent = count > 0 ? count : '';
+      });
     }
     function loadRange(manSlug, rangeSlug, container) {
         const man = (HOME_DATA.manufacturers || []).find(m => m.slug === manSlug);
@@ -880,17 +906,20 @@ function sortProducts(products) {
         const mans = HOME_DATA.manufacturers || [];
         const pill = (manSlug, r) => {
           const empty = !r.hidden && !(r.categories || []).length;
+          const pillControls = adminMode
+            ? `<button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}" title="Hide range"
+                class="range-hide px-2 py-1 border-l hover:bg-gray-100 ${r.hidden ? 'text-gray-800' : 'text-gray-400'} hover:text-gray-800" aria-label="Hide range">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+              <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}" title="Delete range"
+                class="range-delete px-2 py-1 border-l hover:bg-gray-100 text-gray-400 hover:text-red-500" aria-label="Delete range">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>`
+            : `<span class="range-count px-2 py-1 border-l text-xs text-gray-400" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}"></span>`;
           return `<span class="range-pill inline-flex items-center border rounded-full text-sm overflow-hidden${r.hidden || empty ? ' opacity-50' : ''}" data-hidden="${r.hidden ? '1' : '0'}" data-categories="${esc((r.categories || []).join(','))}" data-min-ppm="${r.min_ppm != null ? r.min_ppm : ''}" data-era="${esc(r.era || '')}">
           <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}"
             class="range-btn px-3 py-1 hover:bg-gray-100">${esc(r.name)}</button>
-          <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}" title="Hide range"
-            class="range-hide px-2 py-1 border-l hover:bg-gray-100 ${r.hidden ? 'text-gray-800' : 'text-gray-400'} hover:text-gray-800" aria-label="Hide range">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-          </button>
-          <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}" title="Delete range"
-            class="range-delete px-2 py-1 border-l hover:bg-gray-100 text-gray-400 hover:text-red-500" aria-label="Delete range">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
+          ${pillControls}
         </span>`;
         };
         const renderRanges = (m) => {
@@ -908,9 +937,9 @@ function sortProducts(products) {
           return groups.map(g => `<div class="pill-group mb-3" data-man="${esc(m.slug)}" data-group="${esc(g)}">
             <div class="flex items-center gap-1 mb-1">
               <div class="text-xs uppercase tracking-wide text-gray-500 group-label">${esc(g)}</div>
-              <button type="button" class="group-delete-btn text-gray-400 hover:text-red-500" title="Delete group" aria-label="Delete group">
+              ${adminMode ? `<button type="button" class="group-delete-btn text-gray-400 hover:text-red-500" title="Delete group" aria-label="Delete group">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
+              </button>` : ''}
             </div>
             <div class="flex flex-wrap gap-2 items-center">
               ${byGroup.get(g).map(r => pill(m.slug, r)).join('')}
@@ -1028,11 +1057,20 @@ function sortProducts(products) {
 
     function renderStoreFilters() {
       const retailers = HOME_DATA.retailers || [];
+      const settingsBtn = STATIC_MODE ? '' : `
+        <span class="w-px h-4 bg-gray-300 mx-1 self-center"></span>
+        <button type="button" id="settings-btn" title="Settings"
+          class="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 text-gray-500 hover:text-gray-800">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </button>`;
       storeFilters.innerHTML = retailers.map(r => `
         <button type="button" data-slug="${esc(r.slug)}" title="${esc(r.name)}"
           class="store-filter w-5 h-5 rounded p-px border ${selectedStores.has(r.slug) ? 'border-black bg-white ring-1 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
           <img src="${esc(r.icon)}" class="w-full h-full object-contain" alt="${esc(r.name)}" />
-        </button>`).join('');
+        </button>`).join('') + settingsBtn;
       storeFilters.querySelectorAll('.store-filter').forEach(btn => {
         btn.addEventListener('click', () => {
           const slug = btn.dataset.slug;
@@ -1042,6 +1080,8 @@ function sortProducts(products) {
           applyStoreFilterToDOM();
         });
       });
+      const settingsBtnEl = document.getElementById('settings-btn');
+      if (settingsBtnEl) settingsBtnEl.addEventListener('click', toggleSettingsModal);
     }
 
     // For wishlist/owned/manufacturer pages: filter card-outer visibility, offer rows, sticker prices, and sort order in the DOM.
@@ -1201,6 +1241,32 @@ function sortProducts(products) {
         if (!sb.contains(e.target) && sb.classList.contains('translate-x-0')) {
           setOpen(false);
         }
+      });
+    }
+
+    // Settings modal
+    const settingsModal = document.getElementById('settings-modal');
+    const adminToggle = document.getElementById('admin-mode-toggle');
+    if (adminToggle) adminToggle.checked = adminMode;
+
+    function toggleSettingsModal(e) {
+      e.stopPropagation();
+      settingsModal.classList.toggle('hidden');
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!settingsModal.classList.contains('hidden') && !settingsModal.firstElementChild.contains(e.target)) {
+        settingsModal.classList.add('hidden');
+      }
+    });
+
+    if (adminToggle) {
+      adminToggle.addEventListener('change', () => {
+        adminMode = adminToggle.checked;
+        localStorage.setItem('adminMode', adminMode ? '1' : '0');
+        // Re-render pills with updated mode
+        const page = new URLSearchParams(location.search).get('page');
+        if (!page || page === 'home') showManufacturers();
       });
     }
 
