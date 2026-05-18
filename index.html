@@ -916,7 +916,7 @@ function sortProducts(products) {
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>`
             : `<span class="range-count px-1.5 py-0.5 border-l text-gray-400" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}"></span>`;
-          return `<span class="range-pill inline-flex items-center border rounded-full text-xs overflow-hidden${r.hidden || empty ? ' opacity-50' : ''}" data-hidden="${r.hidden ? '1' : '0'}" data-categories="${esc((r.categories || []).join(','))}" data-min-ppm="${r.min_ppm != null ? r.min_ppm : ''}" data-era="${esc(r.era || '')}">
+          return `<span class="range-pill inline-flex items-center border rounded-full text-sm overflow-hidden${r.hidden || empty ? ' opacity-50' : ''}" data-hidden="${r.hidden ? '1' : '0'}" data-categories="${esc((r.categories || []).join(','))}" data-min-ppm="${r.min_ppm != null ? r.min_ppm : ''}" data-era="${esc(r.era || '')}">
           <button type="button" data-man="${esc(manSlug)}" data-range="${esc(r.slug)}"
             class="range-btn px-2.5 py-0.5 hover:bg-gray-100">${esc(r.name)}</button>
           ${pillControls}
@@ -934,7 +934,7 @@ function sortProducts(products) {
             if (!byGroup.has(g)) { byGroup.set(g, []); groups.push(g); }
             byGroup.get(g).push(r);
           }
-          return groups.map(g => `<div class="pill-group mb-1" data-man="${esc(m.slug)}" data-group="${esc(g)}">
+          return groups.map(g => `<div class="pill-group mb-2" data-man="${esc(m.slug)}" data-group="${esc(g)}">
             <div class="flex items-center gap-1 mb-1">
               <div class="text-xs uppercase tracking-wide text-gray-500 group-label">${esc(g)}</div>
               ${adminMode ? `<button type="button" class="group-delete-btn text-gray-400 hover:text-red-500" title="Delete group" aria-label="Delete group">
