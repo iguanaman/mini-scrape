@@ -647,10 +647,22 @@ function sortProducts(products) {
 
     function updatePillCounts() {
       if (adminMode) return;
+      const cat = selectedCategory;
+      const era = selectedEra;
       manufacturers.querySelectorAll('.range-count').forEach(badge => {
         const { man, range } = badge.dataset;
-        const container = manufacturers.querySelector(`.range-products[data-man="${CSS.escape(man)}"][data-range="${CSS.escape(range)}"]`);
-        const count = container ? container.querySelectorAll('.card-outer:not(.hidden)').length : 0;
+        const manData = (HOME_DATA.manufacturers || []).find(m => m.slug === man);
+        const products = (manData && manData.products_by_range && manData.products_by_range[range]) || [];
+        const rangeEra = rangeEraMap.get(`${man}/${range}`) || '';
+        const count = products.filter(p => {
+          const catHide = cat !== 'all' && (p.category || 'unknown') !== cat;
+          const eraHide = era !== 'all' && rangeEra !== '' && rangeEra !== era;
+          const minis = (p.sku && minisMap.get(normSku(p.sku))) ?? p.minis;
+          const prices = Object.values(p.prices || {}).map(e => e && typeof e === 'object' ? e.price : e).filter(v => typeof v === 'number');
+          const ppm = minis && prices.length ? Math.min(...prices) / minis : null;
+          const expHide = filterExpensive !== null && ppm !== null && ppm > filterExpensive;
+          return !catHide && !eraHide && !expHide;
+        }).length;
         badge.textContent = count > 0 ? count : '';
       });
     }
