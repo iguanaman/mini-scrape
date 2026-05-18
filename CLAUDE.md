@@ -46,8 +46,6 @@ retailers/
 manufacturers/
   __init__.py           MANUFACTURERS list
   northstar.py          North Star Figures — list.php?man=<id>&page=<n>. 17 ranges in 3 groups.
-  artizan.py            Artizan Designs — same CMS/parser as NS, list.php?man=<id>. 10 ranges.
-  crusader.py           Crusader Miniatures — same CMS/parser, list.php?cat=<id>&sub=<id>. 41 ranges.
   wargamesatlantic.py   Wargames Atlantic — Shopify collections/{handle}/products.json
   gamesworkshop.py      Games Workshop — Algolia search index (app M5ZIQZNQ2H, public key).
                         ~70 ranges grouped by game system.
