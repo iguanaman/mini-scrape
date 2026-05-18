@@ -1,9 +1,8 @@
 """
-Export wishlist or owned products to CSV.
+Export wishlist and owned products to CSV.
 
 Usage:
-    uv run python scripts/export_csv.py wishlist   # -> wishlist_export.csv
-    uv run python scripts/export_csv.py owned      # -> owned_export.csv
+    uv run python scripts/export_csv.py   # -> wishlist_export.csv, owned_export.csv
 """
 import csv
 import re
@@ -39,26 +38,15 @@ def _row(p: dict) -> list:
     return [p["sku"], p["title"], p["manufacturer_slug"], _strip_html(p.get("description")), min_price, minis, ppm]
 
 
-def export(mode: str) -> None:
-    if mode == "wishlist":
-        rows = db.wishlist_products()
-        out = ROOT / "wishlist_export.csv"
-    elif mode == "owned":
-        rows = db.owned_products()
-        out = ROOT / "owned_export.csv"
-    else:
-        print(f"Unknown mode '{mode}'. Use: wishlist | owned")
-        sys.exit(1)
-
+def export(rows: list, out: Path) -> None:
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(COLUMNS)
         for p in rows:
             w.writerow(_row(p))
-
     print(f"Exported {len(rows)} rows -> {out}")
 
 
 if __name__ == "__main__":
-    mode = sys.argv[1] if len(sys.argv) > 1 else "wishlist"
-    export(mode)
+    export(db.wishlist_products(), ROOT / "wishlist_export.csv")
+    export(db.owned_products(), ROOT / "owned_export.csv")
