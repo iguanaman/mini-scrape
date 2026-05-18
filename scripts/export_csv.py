@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT))
 
 import db
 
-COLUMNS = ["sku", "title", "manufacturer", "description", "min_price", "minis", "price_per_mini"]
+COLUMNS = ["sku", "title", "manufacturer", "era", "description", "min_price", "minis", "price_per_mini"]
 
 
 def _strip_html(text: str | None) -> str | None:
@@ -35,7 +35,7 @@ def _row(p: dict) -> list:
     min_price = _min_price(p.get("prices") or {})
     minis = p.get("minis")
     ppm = round(min_price / minis, 4) if min_price and minis else None
-    return [p["sku"], p["title"], p["manufacturer_slug"], _strip_html(p.get("description")), min_price, minis, ppm]
+    return [p["sku"], p["title"], p["manufacturer_slug"], p.get("era"), _strip_html(p.get("description")), min_price, minis, ppm]
 
 
 def export(rows: list, out: Path) -> None:

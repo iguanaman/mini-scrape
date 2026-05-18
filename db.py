@@ -554,11 +554,13 @@ def wishlist_skus() -> list[str]:
 def owned_products() -> list[dict]:
     with _conn() as c:
         rows = c.execute(
-            """SELECT sku, title, image_url, manufacturer_slug, range_slug, manufacturer_url,
-                      prices_json, minis, owned, category, description, updated_at
-               FROM products
-               WHERE owned > 0
-               ORDER BY manufacturer_slug NULLS LAST, sku"""
+            """SELECT p.sku, p.title, p.image_url, p.manufacturer_slug, p.range_slug,
+                      p.manufacturer_url, p.prices_json, p.minis, p.owned, p.category,
+                      p.description, p.updated_at, r.era
+               FROM products p
+               LEFT JOIN ranges r ON r.manufacturer_slug = p.manufacturer_slug AND r.slug = p.range_slug
+               WHERE p.owned > 0
+               ORDER BY p.manufacturer_slug NULLS LAST, p.sku"""
         ).fetchall()
     out = []
     for r in rows:
@@ -581,6 +583,7 @@ def owned_products() -> list[dict]:
             "category": r["category"],
             "description": r["description"],
             "updated_at": r["updated_at"],
+            "era": r["era"],
         })
     return out
 
@@ -588,11 +591,13 @@ def owned_products() -> list[dict]:
 def wishlist_products() -> list[dict]:
     with _conn() as c:
         rows = c.execute(
-            """SELECT sku, title, image_url, manufacturer_slug, range_slug, manufacturer_url,
-                      prices_json, minis, owned, category, description, updated_at, wishlisted_at
-               FROM products
-               WHERE wishlisted_at IS NOT NULL
-               ORDER BY wishlisted_at DESC"""
+            """SELECT p.sku, p.title, p.image_url, p.manufacturer_slug, p.range_slug,
+                      p.manufacturer_url, p.prices_json, p.minis, p.owned, p.category,
+                      p.description, p.updated_at, p.wishlisted_at, r.era
+               FROM products p
+               LEFT JOIN ranges r ON r.manufacturer_slug = p.manufacturer_slug AND r.slug = p.range_slug
+               WHERE p.wishlisted_at IS NOT NULL
+               ORDER BY p.wishlisted_at DESC"""
         ).fetchall()
     out = []
     for r in rows:
@@ -616,5 +621,6 @@ def wishlist_products() -> list[dict]:
             "description": r["description"],
             "updated_at": r["updated_at"],
             "added_at": r["wishlisted_at"],
+            "era": r["era"],
         })
     return out
