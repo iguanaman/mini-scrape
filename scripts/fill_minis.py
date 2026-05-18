@@ -59,7 +59,7 @@ SYSTEM_PROMPT = (
     "Reply with ONLY one of:\n"
     "- A plain integer if you can determine the model count\n"
     "- minis  if it contains miniatures but quantity is truly unknown\n"
-    "- A category word (book, paint, terrain, dice, accessory) if no miniatures\n"
+    "- One of these category words if no miniatures: accessory, bases, book, dice, paint, terrain\n"
     "No explanation. No punctuation. Just the value."
 )
 
