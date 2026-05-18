@@ -133,11 +133,12 @@
     const sortSelect = document.getElementById('sort-select');
     const filterExpensiveSel = document.getElementById('filter-expensive');
 
-    let selectedStores = new Set();
+    let selectedStores = new Set(JSON.parse(localStorage.getItem('selectedStores') || '[]'));
     let selectedCategory = 'minis';
     let selectedEra = 'all';
     let selectedSort = 'price_per_mini';
-    let filterExpensive = 4;
+    const _savedFilterExpensive = localStorage.getItem('filterExpensive');
+    let filterExpensive = _savedFilterExpensive !== null ? (_savedFilterExpensive === 'null' ? null : parseFloat(_savedFilterExpensive)) : 4;
     let lastRetailers = [];
     let rangeEraMap = new Map(); // "man_slug/range_slug" -> era
     let adminMode = localStorage.getItem('adminMode') === '1';
@@ -1088,6 +1089,7 @@ function sortProducts(products) {
           const slug = btn.dataset.slug;
           if (selectedStores.has(slug)) selectedStores.delete(slug);
           else selectedStores.add(slug);
+          localStorage.setItem('selectedStores', JSON.stringify([...selectedStores]));
           renderStoreFilters();
           applyStoreFilterToDOM();
         });
@@ -1161,9 +1163,11 @@ function sortProducts(products) {
       selectedEra = eraSelect.value;
       applyFilters();
     });
+    filterExpensiveSel.value = filterExpensive === null ? '' : String(filterExpensive);
     filterExpensiveSel.addEventListener('change', () => {
       const v = filterExpensiveSel.value;
       filterExpensive = v === '' ? null : parseFloat(v);
+      localStorage.setItem('filterExpensive', String(filterExpensive));
       applyFilters();
     });
 
