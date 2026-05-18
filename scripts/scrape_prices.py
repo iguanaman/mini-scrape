@@ -5,6 +5,7 @@ Usage:
     uv run python scripts/scrape_prices.py [--manufacturer SLUG] [--range SLUG]
 
 Options:
+    --sku           Only scrape this specific SKU
     --wishlist      Only scrape wishlisted products
     --manufacturer  Only scrape products from this manufacturer slug
     --range         Only scrape products from this range slug (requires --manufacturer)
@@ -99,6 +100,9 @@ async def main(args: argparse.Namespace) -> None:
 
     query = "SELECT sku, title FROM products WHERE sku IS NOT NULL AND hidden = 0"
     params: list = []
+    if args.sku:
+        query += " AND sku = ?"
+        params.append(args.sku)
     if args.wishlist:
         query += " AND wishlisted_at IS NOT NULL"
     if args.older_than is not None:
@@ -175,6 +179,7 @@ async def main(args: argparse.Namespace) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sku", help="Only scrape this specific SKU")
     parser.add_argument("--wishlist", action="store_true", help="Only scrape wishlisted products")
     parser.add_argument("--manufacturer", help="Filter by manufacturer slug")
     parser.add_argument("--range", help="Filter by range slug (requires --manufacturer)")
