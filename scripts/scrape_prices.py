@@ -165,7 +165,7 @@ async def main(args: argparse.Namespace) -> None:
                         prices = new_prices
                     db.upsert_from_retailer(row["sku"], row["title"], None, prices)
                     cheapest = _cheapest_in_stock(
-                        [{"price": v.get("price"), "in_stock": v.get("price") is not None} for v in new_prices.values()]
+                        [{"price": v.get("price"), "in_stock": v.get("price") is not None} for v in prices.values()]
                     )
                     old_cheapest = _cheapest_in_stock(
                         [{"price": v.get("price") if isinstance(v, dict) else v,
