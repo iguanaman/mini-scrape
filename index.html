@@ -126,11 +126,13 @@
     let lastWishlistItems = null;
     let lastOwnedItems = null;
     let wishlistSet = new Set();
+    let lovedSet = new Set();
     let ownedMap = new Map();
     let minisMap = new Map();
 
     function loadWishlistSet() {
       wishlistSet = new Set(HOME_DATA.wishlist_skus || []);
+      lovedSet = new Set(HOME_DATA.loved_skus || []);
     }
 
     function buildRangeEraMap() {
@@ -306,9 +308,39 @@
       });
     }
 
-    function heartSvg(filled) {
-      const fill = filled ? 'currentColor' : 'none';
-      return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="${fill}" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    function heartSvg(state) {
+      if (state === 'loved') {
+        return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="#f59e0b" viewBox="0 0 24 24" stroke="#d97706" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.534-7-10a4 4 0 0 1 7-2.646A4 4 0 0 1 19 11c0 5.466-7 10-7 10z"/>
+        </svg>`;
+      }
+      if (state === 'wish') {
+        return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.534-7-10a4 4 0 0 1 7-2.646A4 4 0 0 1 19 11c0 5.466-7 10-7 10z"/>
+        </svg>`;
+      }
+      return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.534-7-10a4 4 0 0 1 7-2.646A4 4 0 0 1 19 11c0 5.466-7 10-7 10z"/>
+      </svg>`;
+    }
+
+    function navHeartSvg(filterState) {
+      if (filterState === 'loved') {
+        return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="#f59e0b" viewBox="0 0 24 24" stroke="#d97706" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.534-7-10a4 4 0 0 1 7-2.646A4 4 0 0 1 19 11c0 5.466-7 10-7 10z"/>
+        </svg>`;
+      }
+      if (filterState === 'wish') {
+        return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="#ef4444" viewBox="0 0 24 24" stroke="#ef4444" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.534-7-10a4 4 0 0 1 7-2.646A4 4 0 0 1 19 11c0 5.466-7 10-7 10z"/>
+        </svg>`;
+      }
+      if (filterState === 'none') {
+        return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#374151" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.534-7-10a4 4 0 0 1 7-2.646A4 4 0 0 1 19 11c0 5.466-7 10-7 10z"/>
+        </svg>`;
+      }
+      return `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="#9ca3af" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 21s-7-4.534-7-10a4 4 0 0 1 7-2.646A4 4 0 0 1 19 11c0 5.466-7 10-7 10z"/>
       </svg>`;
     }
