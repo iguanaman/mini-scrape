@@ -52,6 +52,7 @@
           <option value="historical-ancient">Ancient</option>
           <option value="historical-gunpowder">Gunpowder</option>
           <option value="historical-modern">Modern</option>
+          <option value="no-era">No era</option>
         </select>
         <select id="sort-select" class="border rounded px-2 py-1 text-sm">
           <option value="sku">SKU</option>
@@ -644,14 +645,14 @@ function sortProducts(products) {
       manufacturers.querySelectorAll('.range-pill').forEach(pill => {
         const cats = (pill.dataset.categories || '').split(',').filter(Boolean);
         const catMatch = cat === 'all' || (cats.length > 0 && (cats.includes(cat) || (cat === 'unknown' && cats.includes('unknown'))));
-        const eraMatch = era === 'all' || pill.dataset.era === era;
+        const eraMatch = era === 'all' || (era === 'no-era' ? pill.dataset.era === '' : pill.dataset.era === era);
         pill.classList.toggle('hidden', !catMatch || !eraMatch);
         pill.classList.remove('category-dim');
       });
       // Cards: hide if category/era doesn't match or price/mini exceeds threshold
       [manufacturers, grid].forEach(root => root.querySelectorAll('.card-outer').forEach(outer => {
         const catHide = cat !== 'all' && outer.dataset.category !== cat;
-        const eraHide = era !== 'all' && outer.dataset.era !== '' && outer.dataset.era !== era;
+        const eraHide = era !== 'all' && (era === 'no-era' ? outer.dataset.era !== '' : (outer.dataset.era === '' || outer.dataset.era !== era));
         outer.classList.toggle('hidden', catHide || eraHide);
       }));
       // Range containers: hide if open but all cards are filtered out
@@ -713,7 +714,7 @@ function sortProducts(products) {
         const rangeEra = rangeEraMap.get(`${man}/${range}`) || '';
         const count = products.filter(p => {
           const catHide = cat !== 'all' && (p.category || 'unknown') !== cat;
-          const eraHide = era !== 'all' && rangeEra !== '' && rangeEra !== era;
+          const eraHide = era !== 'all' && (era === 'no-era' ? rangeEra !== '' : (rangeEra === '' || rangeEra !== era));
           return !catHide && !eraHide;
         }).length;
         badge.textContent = count > 0 ? count : '';
