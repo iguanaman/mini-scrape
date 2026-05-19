@@ -85,6 +85,7 @@ def _build_home_data() -> dict:
         "manufacturers_meta": manufacturers_meta,
         "retailers": RETAILERS,
         "wishlist_skus": [p["sku"] for p in wishlist_items if p.get("sku")],
+        "loved_skus": [p["sku"] for p in wishlist_items if p.get("sku") and p.get("loved")],
         "wishlist_items": wishlist_items,
         "owned_items": owned_items,
     }
@@ -112,6 +113,18 @@ async def wishlist_add(sku: str):
 @app.delete("/api/wishlist/{sku}")
 async def wishlist_delete(sku: str):
     db.remove_wishlist(sku)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/loved/{sku}")
+async def loved_add(sku: str):
+    db.set_loved(sku, True)
+    return JSONResponse({"ok": True})
+
+
+@app.delete("/api/loved/{sku}")
+async def loved_delete(sku: str):
+    db.set_loved(sku, False)
     return JSONResponse({"ok": True})
 
 
