@@ -1239,12 +1239,14 @@ function sortProducts(products) {
       selectedCategory = categorySelect.value;
       localStorage.setItem('selectedCategory', selectedCategory);
       applyFilters();
+      applyWishFilter();
     });
     eraSelect.value = selectedEra;
     eraSelect.addEventListener('change', () => {
       selectedEra = eraSelect.value;
       localStorage.setItem('selectedEra', selectedEra);
       applyFilters();
+      applyWishFilter();
     });
 
     sortSelect.value = selectedSort;
