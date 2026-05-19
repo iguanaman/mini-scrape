@@ -171,7 +171,7 @@
     async function cycleHeart(sku, btn) {
       const key = normSku(sku);
       if (!key) return;
-      const current = btn.dataset.state || 'none';
+      const current = lovedSet.has(key) ? 'loved' : wishlistSet.has(key) ? 'wish' : 'none';
       let next;
       if (current === 'none') next = 'wish';
       else if (current === 'wish') next = 'loved';
@@ -531,7 +531,7 @@
         : 'none';
       const heartBtn = sku ? (STATIC_MODE
         ? (heartState !== 'none' ? `<div class="heart-btn absolute top-2 left-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-red-600 shadow">${heartSvg(heartState)}</div>` : '')
-        : `<button type="button" class="heart-btn absolute top-2 left-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur hover:bg-white shadow transition-opacity duration-500 ${heartState !== 'none' ? '' : 'opacity-0'}"
+        : `<button type="button" class="heart-btn absolute top-2 left-2 z-10 p-1 rounded-full bg-white/80 backdrop-blur text-red-600 hover:bg-white shadow transition-opacity duration-500 ${heartState !== 'none' ? '' : 'opacity-0'}"
           data-sku="${esc(sku)}" data-state="${heartState}"
           title="${heartState === 'none' ? 'Add to wishlist' : heartState === 'wish' ? 'Love this' : 'Remove from wishlist'}">
           ${heartSvg(heartState)}
