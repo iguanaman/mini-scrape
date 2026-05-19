@@ -47,6 +47,7 @@ RETAILERS = [
     {"slug": "element",   "name": "Element Games",          "icon": "/static/icons/element.ico"},
     {"slug": "overlord",  "name": "Overlord Games",         "icon": "/static/icons/overlord.png"},
     {"slug": "nemc",      "name": "North East Model Centre","icon": "/static/icons/nemc.jpg"},
+    {"slug": "snmstuff",  "name": "SnM Stuff",              "icon": "/static/icons/snmstuff.ico"},
 ]
 
 def _norm_sku(s: str | None) -> str | None:

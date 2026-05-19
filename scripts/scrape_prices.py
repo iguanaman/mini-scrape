@@ -26,11 +26,11 @@ sys.path.insert(0, str(ROOT))
 from curl_cffi.requests import AsyncSession
 from tqdm import tqdm
 from retailers import IMPERSONATE
-from retailers import goblin, wayland, firestorm, element, overlord, nemc
+from retailers import goblin, wayland, firestorm, element, overlord, nemc, snmstuff
 from retailers.wayland import WaylandBlockedError
 import db
 
-RETAILERS = [goblin, wayland, firestorm, element, overlord, nemc]
+RETAILERS = [goblin, wayland, firestorm, element, overlord, nemc, snmstuff]
 MIN_PRICE = 15.0
 
 

@@ -53,3 +53,11 @@ WordPress + WooCommerce. `GET /?s=<query>` returns a server-rendered search page
 - Price: `.ps-active-price` is the active price (sale or normal); when on sale, `.ps-price` (line-through sibling) is the RRP. If no `.ps-active-price`, fall back to `.ps-price` as the normal price.
 - Stock: explicit `.in-stock` / `.out-of-stock` element inside the card.
 - SKU: the `.ps-brand` line prefixed with "Part no:" — extract the inner `<span>` text.
+
+## SnM Stuff
+Custom Bluepark platform. `GET /search/for/{SKU}/` — server-side redirect to the product page when exactly one match is found; stays on the search page with "no results were found" when no match.
+- Price: `.selling_price b` (Inc. VAT — displayed price).
+- Stock: `.b_basket` button present and not `disabled` class = in stock.
+- SKU: `#part_number` span.
+- Image: first `img` inside `#image`.
+- No RRP exposed. Free delivery over £75.
