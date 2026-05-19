@@ -1480,7 +1480,7 @@ function sortProducts(products) {
         const img = cardEl.dataset.lbImg;
         if (!img) return;
         lbCards = Array.from(container.querySelectorAll('.card-wrap[data-lb-img]'))
-          .filter(el => !el.closest('.card-outer')?.classList.contains('hidden'))
+          .filter(el => { const o = el.closest('.card-outer'); return o && !o.classList.contains('hidden') && o.style.display !== 'none'; })
           .map(el => ({ img: el.dataset.lbImg, title: el.dataset.lbTitle || '', el }));
         const clickedImg = cardEl.dataset.lbImg;
         lbIdx = lbCards.findIndex(c => c.img === clickedImg);
