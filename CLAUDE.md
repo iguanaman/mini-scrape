@@ -2,6 +2,8 @@
 
 Personal tool for browsing miniature wargaming products by manufacturer range, with retailer prices. Home page shows manufacturer sections with range pills — clicking a range expands inline product cards sorted by price-per-mini. Cards show a price sticker, wishlist heart, hide eye, owned counter, and minis counter. Clicking a card image opens a lightbox. Store-filter icons in the header filter cards and offer rows to selected retailers.
 
+The card heart button cycles three states: empty (not wishlisted) → red filled (wishlisted) → gold filled (loved, a higher tier of wishlist). A 4-state nav filter button (all/not-wishlisted/wishlisted/loved) is shown in the header on all pages.
+
 ## Deep-dive references
 Read these on demand — not loaded by default:
 - `docs/retailers.md` — per-retailer scraping specifics.
@@ -123,7 +125,8 @@ Each returned product:
 - `GET /` / `/wishlist` / `/owned` — serve `index.html` (FileResponse)
 - `GET /static/data.json` — intercepted by FastAPI, returns `_build_home_data()` fresh from DB
 - `GET /api/ping` — `{"ok": true}`. Used by frontend to detect live vs static mode.
-- `POST /api/wishlist/{sku}` / `DELETE /api/wishlist/{sku}` — toggle wishlist
+- `POST /api/wishlist/{sku}` / `DELETE /api/wishlist/{sku}` — add/remove wishlist (DELETE also clears loved)
+- `POST /api/loved/{sku}` / `DELETE /api/loved/{sku}` — set/clear loved state (also ensures wishlisted)
 - `POST /api/hide/{sku}` / `DELETE /api/hide/{sku}` — hide/unhide product
 - `POST /api/hide-range/{man_slug}/{range_slug}` / `DELETE` — hide/unhide range pill
 - `DELETE /api/range/{man_slug}/{range_slug}` — delete range and all its products
