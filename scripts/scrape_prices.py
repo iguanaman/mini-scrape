@@ -10,6 +10,8 @@ Options:
     --manufacturer  Only scrape products from this manufacturer slug
     --range         Only scrape products from this range slug (requires --manufacturer)
     --older-than    Only scrape products last updated more than N days ago
+    --retailer      Only scrape from this retailer slug (merges into existing prices;
+                    skips products that have no existing prices_json)
     --delay         Seconds to wait between products (default: 1)
 """
 import argparse
@@ -58,14 +60,14 @@ def _cheapest_in_stock(results: list[dict]) -> float | None:
     return min(prices) if prices else None
 
 
-async def scrape_sku(sku: str, title: str | None, client: AsyncSession) -> dict[str, dict]:
-    """Search all retailers for a SKU, return {retailer_slug: {price, url}} prices dict."""
+async def scrape_sku(sku: str, title: str | None, client: AsyncSession, retailers: list = RETAILERS) -> dict[str, dict]:
+    """Search retailers for a SKU, return {retailer_slug: {price, url}} prices dict."""
     outcomes = await asyncio.gather(
-        *(r.search(sku, client) for r in RETAILERS),
+        *(r.search(sku, client) for r in retailers),
         return_exceptions=True,
     )
     prices: dict[str, dict] = {}
-    for module, outcome in zip(RETAILERS, outcomes):
+    for module, outcome in zip(retailers, outcomes):
         if isinstance(outcome, WaylandBlockedError):
             raise outcome
         if isinstance(outcome, Exception):
@@ -95,10 +97,21 @@ async def scrape_sku(sku: str, title: str | None, client: AsyncSession) -> dict[
 
 async def main(args: argparse.Namespace) -> None:
     import sqlite3
+
+    retailer_module = None
+    if args.retailer:
+        retailer_module = next((r for r in RETAILERS if r.SLUG == args.retailer), None)
+        if retailer_module is None:
+            log.error("Unknown retailer slug %r. Valid: %s", args.retailer, ", ".join(r.SLUG for r in RETAILERS))
+            return
+        active_retailers = [retailer_module]
+    else:
+        active_retailers = RETAILERS
+
     conn = sqlite3.connect(ROOT / "main.db")
     conn.row_factory = sqlite3.Row
 
-    query = "SELECT sku, title FROM products WHERE sku IS NOT NULL AND hidden = 0"
+    query = "SELECT sku, title, prices_json FROM products WHERE sku IS NOT NULL AND hidden = 0"
     params: list = []
     if args.sku:
         query += " AND sku = ?"
@@ -114,22 +127,20 @@ async def main(args: argparse.Namespace) -> None:
     if args.range:
         query += " AND range_slug = ?"
         params.append(args.range)
+    if retailer_module:
+        # Skip products that have never been fully scraped
+        query += " AND prices_json IS NOT NULL"
     query += " ORDER BY manufacturer_slug, range_slug, sku"
 
     rows = conn.execute(query, params).fetchall()
-
-    # Pre-load existing prices for price-drop detection
-    skus = [r["sku"] for r in rows]
-    placeholders = ",".join("?" * len(skus))
-    prev_rows = conn.execute(
-        f"SELECT sku, prices_json FROM products WHERE sku IN ({placeholders})", skus
-    ).fetchall() if skus else []
     conn.close()
+
+    # Pre-load existing prices for merge (retailer mode) and price-drop detection
     prev_prices: dict[str, dict] = {}
-    for pr in prev_rows:
-        if pr["prices_json"]:
+    for row in rows:
+        if row["prices_json"]:
             try:
-                prev_prices[pr["sku"]] = json.loads(pr["prices_json"])
+                prev_prices[row["sku"]] = json.loads(row["prices_json"])
             except Exception:
                 pass
 
@@ -137,7 +148,7 @@ async def main(args: argparse.Namespace) -> None:
         log.info("No products found matching filters.")
         return
 
-    log.info("Scraping prices for %d products across %d retailers…", len(rows), len(RETAILERS))
+    log.info("Scraping prices for %d products across %d retailers…", len(rows), len(active_retailers))
     t0 = time.time()
 
     async with AsyncSession(impersonate=IMPERSONATE, timeout=20) as client:
@@ -145,11 +156,16 @@ async def main(args: argparse.Namespace) -> None:
         for i, row in enumerate(bar):
             while True:
                 try:
-                    prices = await scrape_sku(row["sku"], row["title"], client)
+                    new_prices = await scrape_sku(row["sku"], row["title"], client, active_retailers)
                     old = prev_prices.get(row["sku"], {})
+                    if retailer_module:
+                        # Merge: keep existing retailer prices, update only this retailer's entry
+                        prices = {**old, **new_prices}
+                    else:
+                        prices = new_prices
                     db.upsert_from_retailer(row["sku"], row["title"], None, prices)
                     cheapest = _cheapest_in_stock(
-                        [{"price": v.get("price"), "in_stock": v.get("price") is not None} for v in prices.values()]
+                        [{"price": v.get("price"), "in_stock": v.get("price") is not None} for v in new_prices.values()]
                     )
                     old_cheapest = _cheapest_in_stock(
                         [{"price": v.get("price") if isinstance(v, dict) else v,
@@ -184,6 +200,7 @@ if __name__ == "__main__":
     parser.add_argument("--manufacturer", help="Filter by manufacturer slug")
     parser.add_argument("--range", help="Filter by range slug (requires --manufacturer)")
     parser.add_argument("--older-than", type=int, metavar="DAYS", help="Only scrape products last updated more than N days ago")
+    parser.add_argument("--retailer", help="Only scrape from this retailer slug (merges into existing prices; skips products with no prices_json)")
     parser.add_argument("--delay", type=float, default=1.0, help="Seconds between products (default: 1)")
     args = parser.parse_args()
     asyncio.run(main(args))
