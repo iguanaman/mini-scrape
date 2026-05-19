@@ -80,6 +80,7 @@ def init() -> None:
             "ALTER TABLE products ADD COLUMN blacklisted_stores TEXT",
             "ALTER TABLE products ADD COLUMN prices_updated_at TEXT",
             "ALTER TABLE ranges ADD COLUMN era TEXT",
+            "ALTER TABLE products ADD COLUMN loved INTEGER NOT NULL DEFAULT 0",
         ):
             try:
                 c.execute(stmt)
@@ -309,7 +310,24 @@ def remove_wishlist(sku: str) -> None:
     if not key:
         return
     with _conn() as c:
-        c.execute("UPDATE products SET wishlisted_at = NULL WHERE sku = ?", (key,))
+        c.execute("UPDATE products SET wishlisted_at = NULL, loved = 0 WHERE sku = ?", (key,))
+
+
+def set_loved(sku: str, loved: bool) -> None:
+    key = _norm_sku(sku)
+    if not key:
+        return
+    now = _now()
+    with _conn() as c:
+        c.execute(
+            """INSERT INTO products (sku, wishlisted_at, loved, updated_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(sku) DO UPDATE SET
+                 wishlisted_at = COALESCE(products.wishlisted_at, excluded.wishlisted_at),
+                 loved = excluded.loved,
+                 updated_at = excluded.updated_at""",
+            (key, now, 1 if loved else 0, now),
+        )
 
 
 def hide_product(sku: str) -> None:
@@ -593,7 +611,7 @@ def wishlist_products() -> list[dict]:
         rows = c.execute(
             """SELECT p.sku, p.title, p.image_url, p.manufacturer_slug, p.range_slug,
                       p.manufacturer_url, p.prices_json, p.minis, p.owned, p.category,
-                      p.description, p.updated_at, p.wishlisted_at, r.era
+                      p.description, p.updated_at, p.wishlisted_at, p.loved, r.era
                FROM products p
                LEFT JOIN ranges r ON r.manufacturer_slug = p.manufacturer_slug AND r.slug = p.range_slug
                WHERE p.wishlisted_at IS NOT NULL
@@ -621,6 +639,7 @@ def wishlist_products() -> list[dict]:
             "description": r["description"],
             "updated_at": r["updated_at"],
             "added_at": r["wishlisted_at"],
+            "loved": bool(r["loved"]),
             "era": r["era"],
         })
     return out
