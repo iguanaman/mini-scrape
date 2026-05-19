@@ -74,7 +74,7 @@ scripts/
                            Run: uv run python scripts/export_static.py
   export_csv.py            Exports both wishlist and owned products to CSV (sku, title, manufacturer,
                            description, min_price, minis, price_per_mini). Writes wishlist_export.csv
-                           and owned_export.csv. Run: uv run python scripts/export_csv.py
+                           and owned_export.csv to .tmp/. Run: uv run python scripts/export_csv.py
 docs/                   Deep-dive references (see above).
 static/icons/           Retailer + manufacturer favicons
 static/data.json        Exported DB snapshot for static mode. Gitignored.

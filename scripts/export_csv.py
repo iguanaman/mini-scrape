@@ -48,5 +48,6 @@ def export(rows: list, out: Path) -> None:
 
 
 if __name__ == "__main__":
-    export(db.wishlist_products(), ROOT / "wishlist_export.csv")
-    export(db.owned_products(), ROOT / "owned_export.csv")
+    out_dir = ROOT / ".tmp"
+    export(db.wishlist_products(), out_dir / "wishlist_export.csv")
+    export(db.owned_products(), out_dir / "owned_export.csv")
