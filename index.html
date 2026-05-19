@@ -60,6 +60,9 @@
           <option value="price_per_mini" selected>Price/mini</option>
           <option value="price">Price</option>
         </select>
+        <button type="button" id="wish-filter-btn" title="Filter by wishlist"
+          class="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200">
+        </button>
       </div>
       <div class="flex items-end gap-8">
         <a id="wishlist-link" href="/?page=wishlist" class="text-sm no-underline text-gray-700 hover:text-black pb-0.5">Wishlist</a>
@@ -1135,17 +1138,11 @@ function sortProducts(products) {
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
           </svg>
         </button>`;
-      const wishFilterBtn = `
-        <span class="w-px h-4 bg-gray-300 mx-1 self-center"></span>
-        <button type="button" id="wish-filter-btn" title="Filter by wishlist"
-          class="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200">
-          ${navHeartSvg(wishFilter)}
-        </button>`;
       storeFilters.innerHTML = retailers.map(r => `
         <button type="button" data-slug="${esc(r.slug)}" title="${esc(r.name)}"
           class="store-filter w-5 h-5 rounded p-px border ${selectedStores.has(r.slug) ? 'border-black bg-white ring-1 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
           <img src="${esc(r.icon)}" class="w-full h-full object-contain" alt="${esc(r.name)}" />
-        </button>`).join('') + wishFilterBtn + settingsBtn;
+        </button>`).join('') + settingsBtn;
       storeFilters.querySelectorAll('.store-filter').forEach(btn => {
         btn.addEventListener('click', () => {
           const slug = btn.dataset.slug;
@@ -1157,16 +1154,6 @@ function sortProducts(products) {
           applyWishFilter();
         });
       });
-      const wishFilterBtnEl = document.getElementById('wish-filter-btn');
-      if (wishFilterBtnEl) {
-        wishFilterBtnEl.addEventListener('click', () => {
-          const states = ['all', 'none', 'wish', 'loved'];
-          wishFilter = states[(states.indexOf(wishFilter) + 1) % states.length];
-          localStorage.setItem('wishFilter', wishFilter);
-          wishFilterBtnEl.innerHTML = navHeartSvg(wishFilter);
-          applyWishFilter();
-        });
-      }
       const settingsBtnEl = document.getElementById('settings-btn');
       if (settingsBtnEl) settingsBtnEl.addEventListener('click', toggleSettingsModal);
     }
@@ -1246,6 +1233,16 @@ function sortProducts(products) {
       selectedEra = eraSelect.value;
       localStorage.setItem('selectedEra', selectedEra);
       applyFilters();
+      applyWishFilter();
+    });
+
+    const wishFilterBtnEl = document.getElementById('wish-filter-btn');
+    wishFilterBtnEl.innerHTML = navHeartSvg(wishFilter);
+    wishFilterBtnEl.addEventListener('click', () => {
+      const states = ['all', 'none', 'wish', 'loved'];
+      wishFilter = states[(states.indexOf(wishFilter) + 1) % states.length];
+      localStorage.setItem('wishFilter', wishFilter);
+      wishFilterBtnEl.innerHTML = navHeartSvg(wishFilter);
       applyWishFilter();
     });
 
