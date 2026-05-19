@@ -123,6 +123,7 @@
     let lastRetailers = [];
     let rangeEraMap = new Map(); // "man_slug/range_slug" -> era
     let adminMode = localStorage.getItem('adminMode') === '1';
+    let wishFilter = localStorage.getItem('wishFilter') || 'all';
     let lastWishlistItems = null;
     let lastOwnedItems = null;
     let wishlistSet = new Set();
@@ -680,6 +681,27 @@ function sortProducts(products) {
       updatePillCounts();
     }
 
+    function applyWishFilter() {
+      [manufacturers, grid].forEach(root =>
+        root.querySelectorAll('.card-outer').forEach(outer => {
+          const sku = normSku(outer.querySelector('.card-wrap')?.dataset?.sku || '');
+          let hide = false;
+          if (wishFilter === 'none') hide = wishlistSet.has(sku);
+          else if (wishFilter === 'wish') hide = !wishlistSet.has(sku);
+          else if (wishFilter === 'loved') hide = !lovedSet.has(sku);
+          // 'all': hide stays false
+          if (hide) {
+            outer.dataset.wishHidden = '1';
+            outer.style.display = 'none';
+          } else {
+            delete outer.dataset.wishHidden;
+            // Only restore display if not hidden by another filter
+            if (!outer.dataset.storeHidden) outer.style.removeProperty('display');
+          }
+        })
+      );
+    }
+
     function updatePillCounts() {
       if (adminMode) return;
       const cat = selectedCategory;
@@ -755,6 +777,7 @@ function sortProducts(products) {
         bindCardClicks(container);
         applyFilters();
         applyStoreFilterToDOM();
+        applyWishFilter();
     }
 
     function showWishlist() {
@@ -817,6 +840,7 @@ function sortProducts(products) {
       bindCardClicks(container);
       applyFilters();
       applyStoreFilterToDOM();
+      applyWishFilter();
     }
 
     function showOwned() {
@@ -923,6 +947,7 @@ function sortProducts(products) {
       bindContainer(manufacturers);
       applyFilters();
       applyStoreFilterToDOM();
+      applyWishFilter();
     }
 
     function populateCategorySelect() {
@@ -1109,11 +1134,17 @@ function sortProducts(products) {
             <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
           </svg>
         </button>`;
+      const wishFilterBtn = `
+        <span class="w-px h-4 bg-gray-300 mx-1 self-center"></span>
+        <button type="button" id="wish-filter-btn" title="Filter by wishlist"
+          class="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200">
+          ${navHeartSvg(wishFilter)}
+        </button>`;
       storeFilters.innerHTML = retailers.map(r => `
         <button type="button" data-slug="${esc(r.slug)}" title="${esc(r.name)}"
           class="store-filter w-5 h-5 rounded p-px border ${selectedStores.has(r.slug) ? 'border-black bg-white ring-1 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
           <img src="${esc(r.icon)}" class="w-full h-full object-contain" alt="${esc(r.name)}" />
-        </button>`).join('') + settingsBtn;
+        </button>`).join('') + wishFilterBtn + settingsBtn;
       storeFilters.querySelectorAll('.store-filter').forEach(btn => {
         btn.addEventListener('click', () => {
           const slug = btn.dataset.slug;
@@ -1122,8 +1153,19 @@ function sortProducts(products) {
           localStorage.setItem('selectedStores', JSON.stringify([...selectedStores]));
           renderStoreFilters();
           applyStoreFilterToDOM();
+          applyWishFilter();
         });
       });
+      const wishFilterBtnEl = document.getElementById('wish-filter-btn');
+      if (wishFilterBtnEl) {
+        wishFilterBtnEl.addEventListener('click', () => {
+          const states = ['all', 'none', 'wish', 'loved'];
+          wishFilter = states[(states.indexOf(wishFilter) + 1) % states.length];
+          localStorage.setItem('wishFilter', wishFilter);
+          wishFilterBtnEl.innerHTML = navHeartSvg(wishFilter);
+          applyWishFilter();
+        });
+      }
       const settingsBtnEl = document.getElementById('settings-btn');
       if (settingsBtnEl) settingsBtnEl.addEventListener('click', toggleSettingsModal);
     }
@@ -1136,11 +1178,15 @@ function sortProducts(products) {
         container.querySelectorAll('.card-outer').forEach(outer => {
           const offerRows = outer.querySelectorAll('.offer-row');
           if (!sel.size) {
-            outer.style.display = '';
+            if (outer.dataset.wishHidden !== '1') outer.style.display = '';
             offerRows.forEach(row => { row.style.display = ''; });
           } else {
             const hasMatch = [...offerRows].some(row => sel.has(row.dataset.slug));
-            outer.style.display = hasMatch ? '' : 'none';
+            if (!hasMatch) {
+              outer.style.display = 'none';
+            } else if (outer.dataset.wishHidden !== '1') {
+              outer.style.display = '';
+            }
             offerRows.forEach(row => {
               row.style.display = sel.has(row.dataset.slug) ? '' : 'none';
             });
