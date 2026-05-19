@@ -1179,14 +1179,17 @@ function sortProducts(products) {
         container.querySelectorAll('.card-outer').forEach(outer => {
           const offerRows = outer.querySelectorAll('.offer-row');
           if (!sel.size) {
+            delete outer.dataset.storeHidden;
             if (outer.dataset.wishHidden !== '1') outer.style.display = '';
             offerRows.forEach(row => { row.style.display = ''; });
           } else {
             const hasMatch = [...offerRows].some(row => sel.has(row.dataset.slug));
             if (!hasMatch) {
+              outer.dataset.storeHidden = '1';
               outer.style.display = 'none';
-            } else if (outer.dataset.wishHidden !== '1') {
-              outer.style.display = '';
+            } else {
+              delete outer.dataset.storeHidden;
+              if (outer.dataset.wishHidden !== '1') outer.style.display = '';
             }
             offerRows.forEach(row => {
               row.style.display = sel.has(row.dataset.slug) ? '' : 'none';
