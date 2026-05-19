@@ -59,16 +59,6 @@
           <option value="price_per_mini" selected>Price/mini</option>
           <option value="price">Price</option>
         </select>
-        <label class="flex items-center gap-1 text-sm select-none">
-          &lt;£<select id="filter-expensive" class="bg-transparent text-sm cursor-pointer border-b border-gray-400 focus:outline-none">
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4" selected>4</option>
-            <option value="5">5</option>
-            <option value="10">10</option>
-            <option value="">—</option>
-          </select>/mini
-        </label>
       </div>
       <div class="flex items-end gap-8">
         <a id="wishlist-link" href="/?page=wishlist" class="text-sm no-underline text-gray-700 hover:text-black pb-0.5">Wishlist</a>
@@ -125,14 +115,11 @@
     const categorySelect = document.getElementById('category-select');
     const eraSelect = document.getElementById('era-select');
     const sortSelect = document.getElementById('sort-select');
-    const filterExpensiveSel = document.getElementById('filter-expensive');
 
     let selectedStores = new Set(JSON.parse(localStorage.getItem('selectedStores') || '[]'));
     let selectedCategory = localStorage.getItem('selectedCategory') || 'minis';
     let selectedEra = localStorage.getItem('selectedEra') || 'all';
     let selectedSort = localStorage.getItem('selectedSort') || 'price_per_mini';
-    const _savedFilterExpensive = localStorage.getItem('filterExpensive');
-    let filterExpensive = _savedFilterExpensive !== null ? (_savedFilterExpensive === 'null' ? null : parseFloat(_savedFilterExpensive)) : 4;
     let lastRetailers = [];
     let rangeEraMap = new Map(); // "man_slug/range_slug" -> era
     let adminMode = localStorage.getItem('adminMode') === '1';
@@ -600,18 +587,14 @@ function sortProducts(products) {
         const cats = (pill.dataset.categories || '').split(',').filter(Boolean);
         const catMatch = cat === 'all' || (cats.length > 0 && (cats.includes(cat) || (cat === 'unknown' && cats.includes('unknown'))));
         const eraMatch = era === 'all' || pill.dataset.era === era;
-        const minPpm = pill.dataset.minPpm !== '' ? parseFloat(pill.dataset.minPpm) : null;
-        const ppmHide = filterExpensive !== null && minPpm !== null && minPpm > filterExpensive;
-        pill.classList.toggle('hidden', !catMatch || !eraMatch || ppmHide);
+        pill.classList.toggle('hidden', !catMatch || !eraMatch);
         pill.classList.remove('category-dim');
       });
       // Cards: hide if category/era doesn't match or price/mini exceeds threshold
       [manufacturers, grid].forEach(root => root.querySelectorAll('.card-outer').forEach(outer => {
         const catHide = cat !== 'all' && outer.dataset.category !== cat;
         const eraHide = era !== 'all' && outer.dataset.era !== '' && outer.dataset.era !== era;
-        const ppm = outer.dataset.ppm !== '' ? parseFloat(outer.dataset.ppm) : null;
-        const expHide = filterExpensive !== null && ppm !== null && ppm > filterExpensive;
-        outer.classList.toggle('hidden', catHide || eraHide || expHide);
+        outer.classList.toggle('hidden', catHide || eraHide);
       }));
       // Range containers: hide if open but all cards are filtered out
       manufacturers.querySelectorAll('.range-products').forEach(container => {
@@ -652,11 +635,7 @@ function sortProducts(products) {
         const count = products.filter(p => {
           const catHide = cat !== 'all' && (p.category || 'unknown') !== cat;
           const eraHide = era !== 'all' && rangeEra !== '' && rangeEra !== era;
-          const minis = (p.sku && minisMap.get(normSku(p.sku))) ?? p.minis;
-          const prices = Object.values(p.prices || {}).map(e => e && typeof e === 'object' ? e.price : e).filter(v => typeof v === 'number');
-          const ppm = minis && prices.length ? Math.min(...prices) / minis : null;
-          const expHide = filterExpensive !== null && ppm !== null && ppm > filterExpensive;
-          return !catHide && !eraHide && !expHide;
+          return !catHide && !eraHide;
         }).length;
         badge.textContent = count > 0 ? count : '';
       });
@@ -1158,13 +1137,6 @@ function sortProducts(products) {
     eraSelect.addEventListener('change', () => {
       selectedEra = eraSelect.value;
       localStorage.setItem('selectedEra', selectedEra);
-      applyFilters();
-    });
-    filterExpensiveSel.value = filterExpensive === null ? '' : String(filterExpensive);
-    filterExpensiveSel.addEventListener('change', () => {
-      const v = filterExpensiveSel.value;
-      filterExpensive = v === '' ? null : parseFloat(v);
-      localStorage.setItem('filterExpensive', String(filterExpensive));
       applyFilters();
     });
 
