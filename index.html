@@ -23,7 +23,7 @@
     .owned-counter:not(.has-count), .minis-counter:not(.has-count) { transition: none; }
     .counter-label { opacity: 1; transition: opacity 0.2s; }
     .counter-inputs { opacity: 0; transition: opacity 0.2s; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 2px; pointer-events: none; }
-    .card-wrap:hover .counter-label { opacity: 0; }
+    body:not(.static-mode) .card-wrap:hover .counter-label { opacity: 0; }
     .card-wrap:hover .counter-inputs { opacity: 1; pointer-events: auto; }
     #lb-overlays .counter-label { opacity: 0; }
     #lb-overlays .counter-inputs { opacity: 1; pointer-events: auto; }
@@ -308,6 +308,7 @@
         const sku = counterEl.dataset.sku;
         [['minis-dec', -1], ['minis-inc', 1]].forEach(([cls, dir]) => {
           const btn = counterEl.querySelector('.' + cls);
+          if (!btn) return;
           let holdTimer = null;
           let rafId = null;
           let nextAt = 0;
@@ -416,12 +417,15 @@
     function bindOwnedCounters(container) {
       container.querySelectorAll('.owned-counter').forEach(counterEl => {
         const sku = counterEl.dataset.sku;
-        counterEl.querySelector('.owned-dec').addEventListener('click', (e) => {
+        const dec = counterEl.querySelector('.owned-dec');
+        const inc = counterEl.querySelector('.owned-inc');
+        if (!dec || !inc) return;
+        dec.addEventListener('click', (e) => {
           e.stopPropagation();
           e.preventDefault();
           changeOwned(sku, -1, counterEl);
         });
-        counterEl.querySelector('.owned-inc').addEventListener('click', (e) => {
+        inc.addEventListener('click', (e) => {
           e.stopPropagation();
           e.preventDefault();
           changeOwned(sku, 1, counterEl);
@@ -1406,6 +1410,7 @@ function sortProducts(products) {
       }
       HOME_DATA = await dataRes.value.json();
       STATIC_MODE = pingRes.status === 'rejected' || !pingRes.value.ok;
+      if (STATIC_MODE) document.body.classList.add('static-mode');
       loadWishlistSet();
       buildRangeEraMap();
       const page = new URLSearchParams(location.search).get('page');
