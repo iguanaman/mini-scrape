@@ -44,6 +44,10 @@ Product shape in `products_by_range` / `wishlist_items` / `owned_items`:
 - Owned/minis show label only (no +/− controls, no hover animation)
 - Range hide/delete buttons still rendered but their API calls fail silently
 
+### Base path (sub-path hosting)
+
+The frontend may be served from a sub-path (e.g. GitHub Pages at `/mini-scrape/`). A `BASE` constant is derived from the directory of `location.pathname`, and a `url()` helper rewrites root-relative app URLs (`/static/...`, `/api/...`) against it. External URLs (product `image_url`, `http(s)`/protocol-relative) pass through unchanged. All `fetch()` calls and data-driven icon `src` values go through `url()`; the `<head>` favicon and the hardcoded shipping-legend icons use plain relative paths (`static/icons/...`). Routing is query-based (`?page=wishlist`), so the page always loads at the site root and relative paths stay correct.
+
 ## Frontend layout
 
 Sticky header: left — category/sort/filter controls; centre — Wishlist · Mini Market · Owned nav; right — retailer store-filter icons (small, `w-4 h-4`).

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>Mini Market</title>
-  <link rel="icon" type="image/svg+xml" href="/static/icons/favicon.svg" />
+  <link rel="icon" type="image/svg+xml" href="static/icons/favicon.svg" />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     .line-clamp-2 {
@@ -92,12 +92,12 @@
     <div class="p-4 w-72">
       <h2 class="font-semibold text-sm mb-2">Free UK shipping thresholds</h2>
       <ul class="text-sm space-y-1">
-        <li class="flex items-center gap-2"><img src="/static/icons/wayland.png" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Wayland Games</span> <span class="font-medium">£20</span></li>
-        <li class="flex items-center gap-2"><img src="/static/icons/firestorm.png" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Firestorm Games</span> <span class="font-medium">£60</span></li>
-        <li class="flex items-center gap-2"><img src="/static/icons/goblin.webp" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Goblin Gaming</span> <span class="font-medium">£75</span></li>
-        <li class="flex items-center gap-2"><img src="/static/icons/element.ico" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Element Games</span> <span class="font-medium">£80</span></li>
-        <li class="flex items-center gap-2"><img src="/static/icons/overlord.png" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Overlord Games</span> <span class="font-medium">£75</span></li>
-        <li class="flex items-center gap-2"><img src="/static/icons/nemc.jpg" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">North East Model Centre</span> <span class="font-medium">none</span></li>
+        <li class="flex items-center gap-2"><img src="static/icons/wayland.png" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Wayland Games</span> <span class="font-medium">£20</span></li>
+        <li class="flex items-center gap-2"><img src="static/icons/firestorm.png" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Firestorm Games</span> <span class="font-medium">£60</span></li>
+        <li class="flex items-center gap-2"><img src="static/icons/goblin.webp" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Goblin Gaming</span> <span class="font-medium">£75</span></li>
+        <li class="flex items-center gap-2"><img src="static/icons/element.ico" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Element Games</span> <span class="font-medium">£80</span></li>
+        <li class="flex items-center gap-2"><img src="static/icons/overlord.png" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">Overlord Games</span> <span class="font-medium">£75</span></li>
+        <li class="flex items-center gap-2"><img src="static/icons/nemc.jpg" class="w-4 h-4 object-contain" alt="" /> <span class="flex-1">North East Model Centre</span> <span class="font-medium">none</span></li>
       </ul>
       <p class="text-xs text-gray-500 mt-3">UK standard delivery, excluding restricted items. Always check the store for the current rate.</p>
     </div>
@@ -111,7 +111,14 @@
   <script>
     let HOME_DATA = null;
     let STATIC_MODE = false;
-  </script>
+    // Base path for the deployment (e.g. "/mini-scrape/" on GitHub Pages, "/" locally).
+    // Derived from the directory of the current page so absolute "/static" / "/api"
+    // references resolve correctly under a sub-path.
+    const BASE = location.pathname.replace(/[^/]*$/, '');
+    // Resolve a root-relative app URL ("/static/...", "/api/...") against BASE.
+    // External (http/https/data) URLs are passed through unchanged.
+    const url = (u) => (u && u.charAt(0) === '/' && u.charAt(1) !== '/') ? BASE + u.slice(1) : u;
+</script>
   <script>
     const grid = document.getElementById('grid');
     const manufacturers = document.getElementById('manufacturers');
@@ -158,7 +165,7 @@
       if (!key) return;
       const isHidden = btn.dataset.hidden === '1';
       try {
-        if (!STATIC_MODE) await fetch('/api/hide/' + encodeURIComponent(key), { method: isHidden ? 'DELETE' : 'POST' });
+        if (!STATIC_MODE) await fetch(url('/api/hide/' + encodeURIComponent(key)), { method: isHidden ? 'DELETE' : 'POST' });
         if (isHidden) {
           btn.dataset.hidden = '0';
           btn.innerHTML = eyeSvg(false);
@@ -184,11 +191,11 @@
       try {
         if (!STATIC_MODE) {
           if (next === 'wish') {
-            await fetch('/api/wishlist/' + encodeURIComponent(key), { method: 'POST' });
+            await fetch(url('/api/wishlist/' + encodeURIComponent(key)), { method: 'POST' });
           } else if (next === 'loved') {
-            await fetch('/api/loved/' + encodeURIComponent(key), { method: 'POST' });
+            await fetch(url('/api/loved/' + encodeURIComponent(key)), { method: 'POST' });
           } else {
-            await fetch('/api/wishlist/' + encodeURIComponent(key), { method: 'DELETE' });
+            await fetch(url('/api/wishlist/' + encodeURIComponent(key)), { method: 'DELETE' });
           }
         }
         if (next === 'none') {
@@ -287,7 +294,7 @@
       if (!STATIC_MODE) _minisTimers.set(key, setTimeout(async () => {
         _minisTimers.delete(key);
         try {
-          await fetch('/api/minis/' + encodeURIComponent(key), {
+          await fetch(url('/api/minis/' + encodeURIComponent(key)), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ count: next }),
@@ -379,7 +386,7 @@
       const current = parseInt(counterEl.dataset.owned || '0', 10);
       const next = Math.max(0, current + delta);
       try {
-        if (!STATIC_MODE) await fetch('/api/owned/' + encodeURIComponent(key), {
+        if (!STATIC_MODE) await fetch(url('/api/owned/' + encodeURIComponent(key)), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ count: next }),
@@ -479,7 +486,7 @@
     function offerRow(o) {
       const inner = `
         <span class="flex items-center gap-2 min-w-0">
-          <img src="${esc(o.retailer_icon)}" class="w-4 h-4 object-contain shrink-0" alt="" />
+          <img src="${esc(url(o.retailer_icon))}" class="w-4 h-4 object-contain shrink-0" alt="" />
           <span class="truncate">${esc(o.retailer)}</span>
         </span>`;
       if (!o.in_stock) {
@@ -931,7 +938,7 @@ function sortProducts(products) {
         const manItems = byMan.get(slug);
         const headerHtml = manInfo
           ? `<div class="flex items-center gap-2 mb-3">
-              <img src="${esc(manInfo.icon)}" class="w-5 h-5 object-contain" alt="" />
+              <img src="${esc(url(manInfo.icon))}" class="w-5 h-5 object-contain" alt="" />
               <h2 class="font-semibold">${esc(manInfo.name)}</h2>
              </div>`
           : slug ? `<div class="mb-3"><h2 class="font-semibold">${esc(slug)}</h2></div>` : '';
@@ -1022,7 +1029,7 @@ function sortProducts(products) {
           <section class="border rounded-lg bg-white overflow-hidden">
             <div class="p-3 pb-1">
               <div class="flex items-center gap-2 mb-2">
-                <img src="${esc(m.icon)}" class="w-5 h-5 object-contain" alt="" />
+                <img src="${esc(url(m.icon))}" class="w-5 h-5 object-contain" alt="" />
                 <h2 class="font-semibold">${esc(m.name)}</h2>
               </div>
               ${renderRanges(m)}
@@ -1039,7 +1046,7 @@ function sortProducts(products) {
             const pill = btn.closest('.range-pill');
             const isHidden = pill.dataset.hidden === '1';
             const method = isHidden ? 'DELETE' : 'POST';
-            await fetch(`/api/hide-range/${encodeURIComponent(man)}/${encodeURIComponent(range)}`, { method });
+            await fetch(url(`/api/hide-range/${encodeURIComponent(man)}/${encodeURIComponent(range)}`), { method });
             const nowHidden = !isHidden;
             pill.dataset.hidden = nowHidden ? '1' : '0';
             pill.classList.toggle('opacity-50', nowHidden);
@@ -1054,7 +1061,7 @@ function sortProducts(products) {
             const man = btn.dataset.man, range = btn.dataset.range;
             const pill = btn.closest('.range-pill');
             if (!confirm(`Delete range "${pill.querySelector('.range-btn').textContent}"? This removes all data and prevents re-scraping.`)) return;
-            const res = await fetch(`/api/range/${encodeURIComponent(man)}/${encodeURIComponent(range)}`, { method: 'DELETE' });
+            const res = await fetch(url(`/api/range/${encodeURIComponent(man)}/${encodeURIComponent(range)}`), { method: 'DELETE' });
             if (res.ok) pill.remove();
           });
         });
@@ -1082,7 +1089,7 @@ function sortProducts(products) {
 
           labelEl.querySelector('.group-delete-confirm').addEventListener('click', async e => {
             e.stopPropagation();
-            const res = await fetch(`/api/group/${encodeURIComponent(manSlug)}/${encodeURIComponent(groupName)}`, { method: 'DELETE' });
+            const res = await fetch(url(`/api/group/${encodeURIComponent(manSlug)}/${encodeURIComponent(groupName)}`), { method: 'DELETE' });
             if (res.ok) {
               group.remove();
             } else {
@@ -1141,7 +1148,7 @@ function sortProducts(products) {
       storeFilters.innerHTML = retailers.map(r => `
         <button type="button" data-slug="${esc(r.slug)}" title="${esc(r.name)}"
           class="store-filter w-5 h-5 rounded p-px border ${selectedStores.has(r.slug) ? 'border-black bg-white ring-1 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
-          <img src="${esc(r.icon)}" class="w-full h-full object-contain" alt="${esc(r.name)}" />
+          <img src="${esc(url(r.icon))}" class="w-full h-full object-contain" alt="${esc(r.name)}" />
         </button>`).join('') + settingsBtn;
       storeFilters.querySelectorAll('.store-filter').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -1390,8 +1397,8 @@ function sortProducts(products) {
     // Initial load — /static/data.json served live by FastAPI or as a static file
     (async () => {
       const [dataRes, pingRes] = await Promise.allSettled([
-        fetch('/static/data.json'),
-        fetch('/api/ping'),
+        fetch(url('/static/data.json')),
+        fetch(url('/api/ping')),
       ]);
       if (dataRes.status === 'rejected' || !dataRes.value.ok) {
         manufacturers.innerHTML = `<div class="text-sm text-red-700 p-4">Failed to load data</div>`;
