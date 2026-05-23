@@ -29,8 +29,9 @@ RETAILERS = [
 
 db.init()
 
+registered_slugs = {m.SLUG for m in MANUFACTURERS}
 hidden_ranges = db.get_hidden_ranges()
-mfrs = db.manufacturers_with_ranges()
+mfrs = [m for m in db.manufacturers_with_ranges() if m["slug"] in registered_slugs]
 for m in mfrs:
     for r in m["ranges"]:
         r["hidden"] = (m["slug"], r["slug"]) in hidden_ranges
