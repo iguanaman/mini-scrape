@@ -79,7 +79,7 @@ scripts/
                            and owned_export.csv to .tmp/. Run: uv run python scripts/export_csv.py
 docs/                   Deep-dive references (see above).
 static/icons/           Retailer + manufacturer favicons
-static/data.json        Exported DB snapshot for static mode. Gitignored.
+static/data.json        Exported DB snapshot for static mode. Committed (served by GitHub Pages).
 .vscode/tasks.json      VS Code tasks: dev server, scrape manufacturers, scrape prices,
                         export static, serve static, fill minis, Llama server.
 .tmp/                   Scratch scripts + HTML/JSON dumps. Gitignored.
