@@ -1371,10 +1371,13 @@ function sortProducts(products) {
       });
     }
 
+    document.getElementById('home-link').setAttribute('href', url('/'));
+    document.getElementById('wishlist-link').setAttribute('href', url('/?page=wishlist'));
+    document.getElementById('owned-link').setAttribute('href', url('/?page=owned'));
     document.getElementById('home-link').addEventListener('click', (e) => {
       e.preventDefault();
-      if (location.pathname + location.search !== '/') {
-        history.pushState({}, '', '/');
+      if (location.pathname + location.search !== url('/')) {
+        history.pushState({}, '', url('/'));
       }
       grid.innerHTML = '';
       showManufacturers();
@@ -1383,7 +1386,7 @@ function sortProducts(products) {
     document.getElementById('wishlist-link').addEventListener('click', (e) => {
       e.preventDefault();
       if (location.search !== '?page=wishlist') {
-        history.pushState({}, '', '/?page=wishlist');
+        history.pushState({}, '', url('/?page=wishlist'));
       }
       manufacturers.innerHTML = '';
       showWishlist();
@@ -1392,7 +1395,7 @@ function sortProducts(products) {
     document.getElementById('owned-link').addEventListener('click', (e) => {
       e.preventDefault();
       if (location.search !== '?page=owned') {
-        history.pushState({}, '', '/?page=owned');
+        history.pushState({}, '', url('/?page=owned'));
       }
       manufacturers.innerHTML = '';
       showOwned();
