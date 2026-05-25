@@ -2,6 +2,8 @@
 
 Per-manufacturer scraping notes. Each lives in `manufacturers/<slug>.py`.
 
+**Global price floor:** `manufacturers/__init__.py` defines `PRICE_FLOOR` (currently `17`). `scrape_manufacturers.py` drops any listing whose manufacturer price is below it, so sub-floor blisters/accessories are never persisted. Note this filters at scrape time only — lowering the floor requires a re-scrape, raising it does not delete already-stored rows.
+
 ## North Star Figures (`manufacturers/northstar.py`)
 `GET https://www.northstarfigures.com/list.php?man=<man_id>&page=<n>`. Server-rendered HTML.
 - Each product is a `p.prodpara` with: image link (`prod.php?prod=N`), `alt="Photo of <title> (<sku>)"` regex-parsed for title+SKU, `Our Price:£N.NN` text.
