@@ -71,10 +71,10 @@ Below image: title, SKU (prefixed with manufacturer name), offer rows (expand/co
 
 ## Store filter
 
-One icon per retailer in the header. Each icon cycles three states on click: off → **selected** (black ring) → **lowest-only** (gold/amber bg) → off. State persists in `localStorage` (`selectedStores` + `lowestStores`). The active filter set is the union of selected + gold stores. When any store is active:
+One icon per retailer in the header. Each icon cycles three states on click: off → **selected** (black ring) → **lowest-only** (gold/amber bg) → off. State persists in `localStorage` (`selectedStores` + `lowestStores`). The active filter set is the union of selected + gold stores.
+
+The filter only controls **which cards are visible** — offer rows and the price sticker always show every store (sticker = cheapest across all stores). When any store is active:
 - Cards where none of the active stores have stock are hidden
-- Offer rows for non-active stores are hidden
-- Price sticker updates to cheapest price among active stores only
 
 A **gold (lowest-only)** store additionally requires the card's cheapest price *across all stores* to come from a gold store — i.e. the card only shows where that retailer actually beats every other retailer. With multiple gold stores, a card shows if any of them is the overall cheapest.
 
