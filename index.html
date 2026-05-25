@@ -128,6 +128,9 @@
     const sortSelect = document.getElementById('sort-select');
 
     let selectedStores = new Set(JSON.parse(localStorage.getItem('selectedStores') || '[]'));
+    let lowestStores = new Set(JSON.parse(localStorage.getItem('lowestStores') || '[]'));
+    // Union of plain-selected + gold (lowest-only) stores; used for sticker/offer filtering.
+    function activeStores() { return new Set([...selectedStores, ...lowestStores]); }
     let selectedCategory = localStorage.getItem('selectedCategory') || 'minis';
     let selectedEra = localStorage.getItem('selectedEra') || 'all';
     let selectedSort = localStorage.getItem('selectedSort') || 'price_per_mini';
@@ -536,7 +539,7 @@
           .filter(([, v]) => typeof v === 'number')
       );
       const hasCachedPrices = !!(allRetailers && allRetailers.length && Object.keys(p.prices || {}).length);
-      const displayPrice = computeDisplayPrice(pricesBySlug, selectedStores);
+      const displayPrice = computeDisplayPrice(pricesBySlug, activeStores());
       const _pStickerS = displayPrice !== null ? stickerStyle(displayPrice, p.minis) : { style: '', t: 1 };
       const sticker = `<div class="sticker absolute bottom-8 right-3 flex flex-col items-center justify-center text-stone-900"
              style="${_pStickerS.style}" data-prices="${esc(JSON.stringify(pricesBySlug))}" data-minis="${p.minis ?? ''}">
@@ -567,7 +570,8 @@
       let toggleBar = '';
       if (hasCachedPrices) {
         let offers = pricesJsonToOffers(p.prices, allRetailers);
-        if (selectedStores.size) offers = offers.filter(o => selectedStores.has(o.retailer_slug));
+        const _active = activeStores();
+        if (_active.size) offers = offers.filter(o => _active.has(o.retailer_slug));
         offers.sort((a, b) => {
           const rank = o => o.in_stock ? 0 : 1;
           if (rank(a) !== rank(b)) return rank(a) - rank(b);
@@ -607,7 +611,7 @@
     }
 
     function filteredCheapest(p) {
-      const sel = selectedStores;
+      const sel = activeStores();
       const prices = Object.entries(p.prices || {})
         .filter(([slug]) => !sel.size || sel.has(slug))
         .map(([, e]) => e && typeof e === 'object' ? e.price : e)
@@ -1150,16 +1154,24 @@ function sortProducts(products) {
           </svg>
         </button>`;
       storeFilters.innerHTML = retailers.map(r => `
-        <button type="button" data-slug="${esc(r.slug)}" title="${esc(r.name)}"
-          class="store-filter w-5 h-5 rounded p-px border ${selectedStores.has(r.slug) ? 'border-black bg-white ring-1 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
+        <button type="button" data-slug="${esc(r.slug)}" title="${esc(r.name)}${lowestStores.has(r.slug) ? ' — only where cheapest' : ''}"
+          class="store-filter w-5 h-5 rounded p-px border ${lowestStores.has(r.slug) ? 'border-amber-500 bg-amber-300 ring-1 ring-amber-500' : selectedStores.has(r.slug) ? 'border-black bg-white ring-1 ring-black' : 'border-transparent opacity-60 hover:opacity-100'}">
           <img src="${esc(url(r.icon))}" class="w-full h-full object-contain" alt="${esc(r.name)}" />
         </button>`).join('') + settingsBtn;
       storeFilters.querySelectorAll('.store-filter').forEach(btn => {
         btn.addEventListener('click', () => {
           const slug = btn.dataset.slug;
-          if (selectedStores.has(slug)) selectedStores.delete(slug);
-          else selectedStores.add(slug);
+          // Cycle: off → selected → gold (lowest-only) → off
+          if (selectedStores.has(slug)) {
+            selectedStores.delete(slug);
+            lowestStores.add(slug);
+          } else if (lowestStores.has(slug)) {
+            lowestStores.delete(slug);
+          } else {
+            selectedStores.add(slug);
+          }
           localStorage.setItem('selectedStores', JSON.stringify([...selectedStores]));
+          localStorage.setItem('lowestStores', JSON.stringify([...lowestStores]));
           renderStoreFilters();
           applyStoreFilterToDOM();
           applyWishFilter();
@@ -1171,17 +1183,32 @@ function sortProducts(products) {
 
     // For wishlist/owned/manufacturer pages: filter card-outer visibility, offer rows, sticker prices, and sort order in the DOM.
     function applyStoreFilterToDOM() {
-      const sel = selectedStores;
+      const sel = activeStores();
       [grid, manufacturers].forEach(container => {
         const gridWrappers = new Set();
         container.querySelectorAll('.card-outer').forEach(outer => {
           const offerRows = outer.querySelectorAll('.offer-row');
+          // Full price map (all stores) from the sticker, used for the gold "cheapest" test.
+          const stickerEl = outer.querySelector('.sticker');
+          let pricesBySlug = {};
+          let minis = null;
+          if (stickerEl) {
+            try { pricesBySlug = JSON.parse(stickerEl.dataset.prices || '{}'); } catch { pricesBySlug = {}; }
+            minis = stickerEl.dataset.minis ? parseInt(stickerEl.dataset.minis, 10) : null;
+          }
+          // A gold store qualifies a card only if it's the cheapest across ALL stores.
+          let goldMatch = true;
+          if (lowestStores.size) {
+            const priceVals = Object.values(pricesBySlug).filter(v => typeof v === 'number');
+            const cheapest = priceVals.length ? Math.min(...priceVals) : null;
+            goldMatch = cheapest !== null && [...lowestStores].some(slug => pricesBySlug[slug] === cheapest);
+          }
           if (!sel.size) {
             delete outer.dataset.storeHidden;
             if (outer.dataset.wishHidden !== '1') outer.style.display = '';
             offerRows.forEach(row => { row.style.display = ''; });
           } else {
-            const hasMatch = [...offerRows].some(row => sel.has(row.dataset.slug));
+            const hasMatch = [...offerRows].some(row => sel.has(row.dataset.slug)) && goldMatch;
             if (!hasMatch) {
               outer.dataset.storeHidden = '1';
               outer.style.display = 'none';
@@ -1194,12 +1221,7 @@ function sortProducts(products) {
             });
           }
           // Recompute sticker and sort keys
-          const stickerEl = outer.querySelector('.sticker');
-          let pricesBySlug = {};
-          let minis = null;
           if (stickerEl) {
-            try { pricesBySlug = JSON.parse(stickerEl.dataset.prices || '{}'); } catch { pricesBySlug = {}; }
-            minis = stickerEl.dataset.minis ? parseInt(stickerEl.dataset.minis, 10) : null;
             const price = computeDisplayPrice(pricesBySlug, sel);
             const s = price !== null ? stickerStyle(price, minis) : { style: '', t: 1 };
             stickerEl.style.cssText = price !== null ? s.style : '';

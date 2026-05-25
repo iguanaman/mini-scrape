@@ -1,6 +1,6 @@
 # Mini Market — project notes for Claude
 
-Personal tool for browsing miniature wargaming products by manufacturer range, with retailer prices. Home page shows manufacturer sections with range pills — clicking a range expands inline product cards sorted by price-per-mini. Cards show a price sticker, wishlist heart, hide eye, owned counter, and minis counter. Clicking a card image opens a lightbox. Store-filter icons in the header filter cards and offer rows to selected retailers.
+Personal tool for browsing miniature wargaming products by manufacturer range, with retailer prices. Home page shows manufacturer sections with range pills — clicking a range expands inline product cards sorted by price-per-mini. Cards show a price sticker, wishlist heart, hide eye, owned counter, and minis counter. Clicking a card image opens a lightbox. Store-filter icons in the header filter cards and offer rows to selected retailers; each icon cycles off → selected → lowest-only (gold), where gold shows only cards on which that retailer is the cheapest of all stores.
 
 The card heart button cycles three states: empty (not wishlisted) → red filled (wishlisted) → gold filled (loved, a higher tier of wishlist). A 4-state nav filter button (all/not-wishlisted/wishlisted/loved) is shown in the header on all pages.
 

@@ -1,4 +1,4 @@
-PRICE_FLOOR = 20
+PRICE_FLOOR = 17
 
 from . import (
     northstar,
